@@ -99,6 +99,16 @@ class Config:
         """Get API request timeout in seconds (default: 30)."""
         return int(os.getenv('API_TIMEOUT', '30'))
 
+    @property
+    def api_rate_limit_max_calls(self) -> int:
+        """Get maximum API calls allowed in time window (default: 50)."""
+        return int(os.getenv('API_RATE_LIMIT_MAX_CALLS', '50'))
+
+    @property
+    def api_rate_limit_window(self) -> int:
+        """Get rate limit time window in seconds (default: 60)."""
+        return int(os.getenv('API_RATE_LIMIT_WINDOW', '60'))
+
     # Batching Configuration
     @property
     def sold_items_batch_size(self) -> int:

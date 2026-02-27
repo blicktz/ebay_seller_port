@@ -79,42 +79,25 @@ def encode_date_range_filter(start_date: str, end_date: str) -> str:
     return quote(raw_filter, safe='')
 
 
-def encode_traffic_source_filter(traffic_source: str) -> str:
-    """
-    Encode traffic source for Analytics API filter parameter.
-
-    Args:
-        traffic_source: 'ORGANIC' or 'PROMOTED_LISTINGS'
-
-    Returns:
-        URL-encoded traffic_source filter string
-
-    Example:
-        >>> encode_traffic_source_filter('ORGANIC')
-        'traffic_source:%7BORGANIC%7D'
-    """
-    raw_filter = f"traffic_source:{{{traffic_source}}}"
-    return quote(raw_filter, safe='')
-
-
 def build_analytics_filter(
     marketplace_id: str,
     start_date: str,
     end_date: str,
-    listing_ids: List[str] = None,
-    traffic_source: str = None
+    listing_ids: List[str] = None
 ) -> str:
     """
     Build complete filter string for Analytics API.
 
     Combines multiple filter parameters into a single comma-separated string.
 
+    Note: traffic_source is NOT a valid filter field in the Analytics API.
+    Valid filters are: marketplace_ids, date_range, and listing_ids only.
+
     Args:
         marketplace_id: eBay marketplace ID (e.g., 'EBAY_US')
         start_date: Start date in YYYYMMDD format
         end_date: End date in YYYYMMDD format
         listing_ids: Optional list of item IDs to filter
-        traffic_source: Optional traffic source ('ORGANIC' or 'PROMOTED_LISTINGS')
 
     Returns:
         Complete URL-encoded filter string
@@ -134,10 +117,6 @@ def build_analytics_filter(
     # Listing IDs (optional)
     if listing_ids:
         filters.append(encode_listing_ids_filter(listing_ids))
-
-    # Traffic source (optional)
-    if traffic_source:
-        filters.append(encode_traffic_source_filter(traffic_source))
 
     return ",".join(filters)
 
@@ -187,19 +166,12 @@ if __name__ == "__main__":
     print(f"  Encoded: {date_range}")
     print()
 
-    # Test traffic source encoding
-    traffic = encode_traffic_source_filter('ORGANIC')
-    print(f"Traffic source filter:")
-    print(f"  Encoded: {traffic}")
-    print()
-
     # Test complete filter building
     complete_filter = build_analytics_filter(
         marketplace_id='EBAY_US',
         start_date='20260201',
         end_date='20260225',
-        listing_ids=['198115000001', '198115000002'],
-        traffic_source='PROMOTED_LISTINGS'
+        listing_ids=['198115000001', '198115000002']
     )
     print(f"Complete Analytics filter:")
     print(f"  {complete_filter}")

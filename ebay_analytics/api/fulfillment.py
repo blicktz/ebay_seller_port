@@ -168,7 +168,7 @@ class FulfillmentAPIClient(BaseAPIClient):
             # Extract items from line items
             line_items = order.get('lineItems', [])
             for line_item in line_items:
-                item_id = line_item.get('itemId' or line_item.get('legacyItemId'), '')
+                item_id = line_item.get('itemId') or line_item.get('legacyItemId') or ''
                 if not item_id:
                     continue
 

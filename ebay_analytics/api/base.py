@@ -55,6 +55,7 @@ class BaseAPIClient:
         """
         self.config = config
         self.session = requests.Session()
+        self.call_history = []  # Track API call timestamps for rate limiting
         self._setup_session()
 
     def _setup_session(self):
@@ -147,6 +148,36 @@ class BaseAPIClient:
                 response=response
             )
 
+    def _check_rate_limit(self, url: str):
+        """
+        Check if we're exceeding rate limits (protection against infinite loops).
+
+        Args:
+            url: The API endpoint being called
+
+        Raises:
+            APIError: If rate limit is exceeded
+        """
+        now = time.time()
+        max_calls = self.config.api_rate_limit_max_calls
+        window_seconds = self.config.api_rate_limit_window
+
+        # Remove old calls outside the sliding window
+        cutoff = now - window_seconds
+        self.call_history = [t for t in self.call_history if t > cutoff]
+
+        # Check if we're over the limit
+        if len(self.call_history) >= max_calls:
+            raise APIError(
+                f"Rate limit protection triggered: {len(self.call_history)} calls in last {window_seconds}s "
+                f"(limit: {max_calls} calls/{window_seconds}s). "
+                f"Possible infinite loop detected. Check your code logic. "
+                f"Endpoint: {url}"
+            )
+
+        # Record this call
+        self.call_history.append(now)
+
     def _make_request_with_retry(
         self,
         method: str,
@@ -176,6 +207,9 @@ class BaseAPIClient:
         max_retries = self.config.api_max_retries
         retry_delay = self.config.api_retry_delay
         timeout = self.config.api_timeout
+
+        # Check rate limit before making request
+        self._check_rate_limit(url)
 
         request_headers = self._get_headers(headers)
 

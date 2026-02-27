@@ -89,7 +89,10 @@ class TrafficSyncService:
         end_date: str
     ) -> Dict[str, Any]:
         """
-        Sync traffic for active listings (3 API calls).
+        Sync traffic for active listings (1 API call).
+
+        Note: Promoted vs organic breakdown is NOT supported by Analytics API.
+        Only total traffic metrics are retrieved.
 
         Args:
             start_date: Start date in YYYYMMDD format
@@ -98,60 +101,30 @@ class TrafficSyncService:
         Returns:
             Statistics dictionary
         """
-        # Call 1: Total metrics (no filter)
-        print(f"1️⃣  Fetching TOTAL metrics...")
+        # Fetch total metrics
+        print(f"📊 Fetching traffic metrics...")
         try:
-            total_records = self.analytics_client.get_traffic_for_active_listings(
+            records = self.analytics_client.get_traffic_for_active_listings(
                 start_date=start_date,
-                end_date=end_date,
-                traffic_source=None
+                end_date=end_date
             )
         except Exception as e:
             print(f"   ✗ Error: {e}")
-            total_records = []
+            records = []
 
-        # Call 2: Promoted metrics
-        print(f"\n2️⃣  Fetching PROMOTED metrics...")
-        try:
-            promoted_records = self.analytics_client.get_traffic_for_active_listings(
-                start_date=start_date,
-                end_date=end_date,
-                traffic_source='PROMOTED_LISTINGS'
-            )
-        except Exception as e:
-            print(f"   ✗ Error: {e}")
-            promoted_records = []
-
-        # Call 3: Organic metrics
-        print(f"\n3️⃣  Fetching ORGANIC metrics...")
-        try:
-            organic_records = self.analytics_client.get_traffic_for_active_listings(
-                start_date=start_date,
-                end_date=end_date,
-                traffic_source='ORGANIC'
-            )
-        except Exception as e:
-            print(f"   ✗ Error: {e}")
-            organic_records = []
-
-        # Merge data
-        print(f"\n📊 Merging active listings data...")
-        merged_records = self._merge_traffic_data(
-            total_records=total_records,
-            promoted_records=promoted_records,
-            organic_records=organic_records,
-            listing_status='active'
-        )
+        # Convert to database format
+        print(f"\n📊 Processing {len(records)} records...")
+        db_records = self._convert_to_db_format(records, 'active', start_date, end_date)
 
         # Store in database
-        print(f"💾 Storing {len(merged_records)} active listing records...")
-        if merged_records:
-            self.traffic_repo.bulk_upsert_traffic(merged_records)
+        print(f"💾 Storing {len(db_records)} active listing records...")
+        if db_records:
+            self.traffic_repo.bulk_upsert_traffic(db_records)
             print(f"   ✓ Stored successfully")
         else:
             print(f"   ⚠ No records to store")
 
-        return {'total_records': len(merged_records)}
+        return {'total_records': len(db_records)}
 
     def _sync_sold_listings_traffic(
         self,
@@ -193,155 +166,106 @@ class TrafficSyncService:
         print(f"   Found {len(sold_item_ids)} sold items to query")
         print()
 
-        # Fetch traffic with batching (3 calls per batch)
+        # Fetch traffic metrics
         batch_size = self.config.sold_items_batch_size
 
-        # Call 1: Total metrics
-        print(f"1️⃣  Fetching TOTAL metrics for sold items...")
+        print(f"📊 Fetching traffic metrics for sold items...")
         try:
-            total_records = self.analytics_client.get_traffic_for_sold_listings(
+            records = self.analytics_client.get_traffic_for_sold_listings(
                 start_date=start_date,
                 end_date=end_date,
                 item_ids=sold_item_ids,
-                traffic_source=None,
                 batch_size=batch_size
             )
         except Exception as e:
             print(f"   ✗ Error: {e}")
-            total_records = []
+            records = []
 
-        # Call 2: Promoted metrics
-        print(f"\n2️⃣  Fetching PROMOTED metrics for sold items...")
-        try:
-            promoted_records = self.analytics_client.get_traffic_for_sold_listings(
-                start_date=start_date,
-                end_date=end_date,
-                item_ids=sold_item_ids,
-                traffic_source='PROMOTED_LISTINGS',
-                batch_size=batch_size
-            )
-        except Exception as e:
-            print(f"   ✗ Error: {e}")
-            promoted_records = []
-
-        # Call 3: Organic metrics
-        print(f"\n3️⃣  Fetching ORGANIC metrics for sold items...")
-        try:
-            organic_records = self.analytics_client.get_traffic_for_sold_listings(
-                start_date=start_date,
-                end_date=end_date,
-                item_ids=sold_item_ids,
-                traffic_source='ORGANIC',
-                batch_size=batch_size
-            )
-        except Exception as e:
-            print(f"   ✗ Error: {e}")
-            organic_records = []
-
-        # Merge data
-        print(f"\n📊 Merging sold listings data...")
-        merged_records = self._merge_traffic_data(
-            total_records=total_records,
-            promoted_records=promoted_records,
-            organic_records=organic_records,
-            listing_status='sold'
-        )
+        # Convert to database format
+        print(f"\n📊 Processing {len(records)} records...")
+        db_records = self._convert_to_db_format(records, 'sold', start_date, end_date)
 
         # Store in database
-        print(f"💾 Storing {len(merged_records)} sold listing records...")
-        if merged_records:
-            self.traffic_repo.bulk_upsert_traffic(merged_records)
+        print(f"💾 Storing {len(db_records)} sold listing records...")
+        if db_records:
+            self.traffic_repo.bulk_upsert_traffic(db_records)
             print(f"   ✓ Stored successfully")
         else:
             print(f"   ⚠ No records to store")
 
-        return {'total_records': len(merged_records)}
+        return {'total_records': len(db_records)}
 
-    def _merge_traffic_data(
+    def _convert_to_db_format(
         self,
-        total_records: List[Dict[str, Any]],
-        promoted_records: List[Dict[str, Any]],
-        organic_records: List[Dict[str, Any]],
-        listing_status: str
+        records: List[Dict[str, Any]],
+        listing_status: str,
+        start_date: str,
+        end_date: str
     ) -> List[Dict[str, Any]]:
         """
-        Merge traffic data from 3 API calls into unified records.
+        Convert API records to database format.
+
+        Note: Promoted vs organic breakdown is NOT available from the Analytics API.
+        Those fields will be set to NULL.
 
         Args:
-            total_records: Records from call without filter
-            promoted_records: Records from promoted filter
-            organic_records: Records from organic filter
+            records: Records from Analytics API
             listing_status: 'active' or 'sold'
+            start_date: Start date for report
+            end_date: End date for report
 
         Returns:
-            List of merged traffic dictionaries
+            List of database-ready dictionaries
         """
-        # Index records by (item_id, date) for merging
-        merged = {}
+        from datetime import datetime
 
-        # Process total metrics
-        for record in total_records:
-            item_id = record.get('listingId')
-            # Note: Analytics API may not include date in response for LISTING dimension
-            # We'll use the query date range as the report date
-            date_key = (item_id, None)  # Simplified for now
+        db_records = []
 
-            if date_key not in merged:
-                merged[date_key] = {
-                    'item_id': item_id,
-                    'report_date': None,  # Will need to handle date extraction
-                    'listing_status': listing_status
-                }
+        # Use middle of date range for report_date if not in API response
+        # (Analytics API doesn't always include date per record)
+        default_date = datetime.now().strftime('%Y-%m-%d')
+
+        for record in records:
+            # Extract item_id from dimensionValues
+            dimension_values = record.get('dimensionValues', [])
+            if not dimension_values or not dimension_values[0].get('value'):
+                continue
+
+            item_id = dimension_values[0]['value']
 
             # Extract metrics
             metrics = self._extract_metrics_from_record(record)
-            merged[date_key].update({
+
+            # Build database record
+            db_record = {
+                'item_id': item_id,
+                'report_date': default_date,  # API doesn't include date per record
+                'listing_status': listing_status,
+                # Total metrics
                 'total_impressions': metrics.get('TOTAL_IMPRESSION_TOTAL'),
                 'total_search_impressions': metrics.get('LISTING_IMPRESSION_SEARCH_RESULTS_PAGE'),
                 'total_page_views': metrics.get('LISTING_VIEWS_TOTAL'),
-                'transactions': metrics.get('TRANSACTION')
-            })
+                'transactions': metrics.get('TRANSACTION'),
+                # Promoted metrics - NOT available from Analytics API (set to NULL)
+                'promoted_total_impressions': None,
+                'promoted_search_impressions': None,
+                'promoted_page_views': None,
+                # Organic metrics - NOT available from Analytics API (set to NULL)
+                'organic_total_impressions': None,
+                'organic_search_impressions': None,
+                'organic_page_views': None
+            }
 
-        # Process promoted metrics
-        for record in promoted_records:
-            item_id = record.get('listingId')
-            date_key = (item_id, None)
+            db_records.append(db_record)
 
-            if date_key in merged:
-                metrics = self._extract_metrics_from_record(record)
-                merged[date_key].update({
-                    'promoted_total_impressions': metrics.get('LISTING_IMPRESSION_TOTAL'),
-                    'promoted_search_impressions': metrics.get('LISTING_IMPRESSION_SEARCH_RESULTS_PAGE'),
-                    'promoted_page_views': metrics.get('LISTING_VIEWS_TOTAL')
-                })
-
-        # Process organic metrics
-        for record in organic_records:
-            item_id = record.get('listingId')
-            date_key = (item_id, None)
-
-            if date_key in merged:
-                metrics = self._extract_metrics_from_record(record)
-                merged[date_key].update({
-                    'organic_total_impressions': metrics.get('LISTING_IMPRESSION_TOTAL'),
-                    'organic_search_impressions': metrics.get('LISTING_IMPRESSION_SEARCH_RESULTS_PAGE'),
-                    'organic_page_views': metrics.get('LISTING_VIEWS_TOTAL')
-                })
-
-        # Set report_date for all records (use today's date as proxy)
-        from datetime import datetime
-        today = datetime.now().strftime('%Y-%m-%d')
-        for record in merged.values():
-            if not record['report_date']:
-                record['report_date'] = today
-
-        print(f"   Merged {len(merged)} unique item records")
-
-        return list(merged.values())
+        return db_records
 
     def _extract_metrics_from_record(self, record: Dict[str, Any]) -> Dict[str, int]:
         """
         Extract metrics from Analytics API record.
+
+        The Analytics API returns metrics in metricValues array.
+        The order matches the order of metrics requested.
 
         Args:
             record: API record dictionary
@@ -350,15 +274,27 @@ class TrafficSyncService:
             Dictionary of metric_name -> value
         """
         metrics = {}
-        metric_data = record.get('metricData', [])
+        metric_values = record.get('metricValues', [])
 
-        for metric in metric_data:
-            key = metric.get('key')
-            value = metric.get('value')
-            try:
-                metrics[key] = int(value) if value else 0
-            except (ValueError, TypeError):
-                metrics[key] = 0
+        # Metrics are returned in the same order as requested:
+        # ['TOTAL_IMPRESSION_TOTAL', 'LISTING_IMPRESSION_SEARCH_RESULTS_PAGE',
+        #  'LISTING_VIEWS_TOTAL', 'TRANSACTION']
+        metric_names = [
+            'TOTAL_IMPRESSION_TOTAL',
+            'LISTING_IMPRESSION_SEARCH_RESULTS_PAGE',
+            'LISTING_VIEWS_TOTAL',
+            'TRANSACTION'
+        ]
+
+        for i, metric_name in enumerate(metric_names):
+            if i < len(metric_values):
+                value = metric_values[i].get('value', 0)
+                try:
+                    metrics[metric_name] = int(value) if value else 0
+                except (ValueError, TypeError):
+                    metrics[metric_name] = 0
+            else:
+                metrics[metric_name] = 0
 
         return metrics
 

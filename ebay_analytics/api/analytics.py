@@ -36,11 +36,13 @@ class AnalyticsAPIClient(BaseAPIClient):
         dimension: str = "LISTING",
         metrics: Optional[List[str]] = None,
         listing_ids: Optional[List[str]] = None,
-        traffic_source: Optional[str] = None,
         limit: int = 200
     ) -> Dict[str, Any]:
         """
         Get traffic report from Analytics API.
+
+        Note: traffic_source is NOT supported as a filter field.
+        The Analytics API only supports: marketplace_ids, date_range, and listing_ids.
 
         Args:
             start_date: Start date in YYYYMMDD format
@@ -48,7 +50,6 @@ class AnalyticsAPIClient(BaseAPIClient):
             dimension: Report dimension (default: LISTING)
             metrics: List of metrics to retrieve (optional, API will use defaults)
             listing_ids: Optional list of specific item IDs to query
-            traffic_source: Optional traffic source filter ('ORGANIC' or 'PROMOTED_LISTINGS')
             limit: Maximum records per page (default: 200)
 
         Returns:
@@ -63,12 +64,6 @@ class AnalyticsAPIClient(BaseAPIClient):
             ...     '20260201', '20260225',
             ...     listing_ids=['123', '456', '789']
             ... )
-
-            # Get organic traffic only
-            >>> client.get_traffic_report(
-            ...     '20260201', '20260225',
-            ...     traffic_source='ORGANIC'
-            ... )
         """
         url = f"{self.BASE_URL}/traffic_report"
 
@@ -77,8 +72,7 @@ class AnalyticsAPIClient(BaseAPIClient):
             marketplace_id=self.marketplace_id,
             start_date=start_date,
             end_date=end_date,
-            listing_ids=listing_ids,
-            traffic_source=traffic_source
+            listing_ids=listing_ids
         )
 
         # Build query parameters
@@ -99,8 +93,6 @@ class AnalyticsAPIClient(BaseAPIClient):
         print(f"  Fetching traffic report: {start_date} to {end_date}")
         if listing_ids:
             print(f"    Listing IDs: {len(listing_ids)} items")
-        if traffic_source:
-            print(f"    Traffic source: {traffic_source}")
 
         try:
             response = self.get(url, params=params, headers=headers)
@@ -121,11 +113,12 @@ class AnalyticsAPIClient(BaseAPIClient):
         end_date: str,
         dimension: str = "LISTING",
         metrics: Optional[List[str]] = None,
-        listing_ids: Optional[List[str]] = None,
-        traffic_source: Optional[str] = None
+        listing_ids: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         """
-        Get complete traffic report with automatic pagination.
+        Get traffic report (Analytics API does not support pagination).
+
+        Note: traffic_source filter is NOT supported by the Analytics API.
 
         Args:
             start_date: Start date in YYYYMMDD format
@@ -133,59 +126,41 @@ class AnalyticsAPIClient(BaseAPIClient):
             dimension: Report dimension (default: LISTING)
             metrics: List of metrics to retrieve
             listing_ids: Optional list of specific item IDs
-            traffic_source: Optional traffic source filter
 
         Returns:
-            List of all records from all pages
+            List of all records from the API response
 
         Note:
-            Analytics API returns max 200 records per request.
-            This method handles pagination automatically.
+            The Analytics API returns all available records in a single response.
+            There is no pagination support (no next/href links or offset parameter).
+            The API may have internal limits on the number of records returned.
         """
-        all_records = []
-        offset = 0
-        limit = 200
+        response = self.get_traffic_report(
+            start_date=start_date,
+            end_date=end_date,
+            dimension=dimension,
+            metrics=metrics,
+            listing_ids=listing_ids,
+            limit=200
+        )
 
-        while True:
-            response = self.get_traffic_report(
-                start_date=start_date,
-                end_date=end_date,
-                dimension=dimension,
-                metrics=metrics,
-                listing_ids=listing_ids,
-                traffic_source=traffic_source,
-                limit=limit
-            )
-
-            records = response.get('records', [])
-            if not records:
-                break
-
-            all_records.extend(records)
-
-            # Check if there are more pages
-            if len(records) < limit:
-                break
-
-            offset += limit
-
-        return all_records
+        return response.get('records', [])
 
     def get_traffic_for_active_listings(
         self,
         start_date: str,
-        end_date: str,
-        traffic_source: Optional[str] = None
+        end_date: str
     ) -> List[Dict[str, Any]]:
         """
         Get traffic data for active listings (default behavior).
 
         When no listing_ids filter is provided, the API returns data for active listings.
 
+        Note: traffic_source filter is NOT supported by the Analytics API.
+
         Args:
             start_date: Start date in YYYYMMDD format
             end_date: End date in YYYYMMDD format
-            traffic_source: Optional traffic source filter
 
         Returns:
             List of traffic records for active listings
@@ -202,8 +177,7 @@ class AnalyticsAPIClient(BaseAPIClient):
         return self.get_traffic_report_with_pagination(
             start_date=start_date,
             end_date=end_date,
-            metrics=metrics,
-            traffic_source=traffic_source
+            metrics=metrics
         )
 
     def get_traffic_for_sold_listings(
@@ -211,17 +185,17 @@ class AnalyticsAPIClient(BaseAPIClient):
         start_date: str,
         end_date: str,
         item_ids: List[str],
-        traffic_source: Optional[str] = None,
         batch_size: int = 200
     ) -> List[Dict[str, Any]]:
         """
         Get traffic data for sold listings using listing_ids filter.
 
+        Note: traffic_source filter is NOT supported by the Analytics API.
+
         Args:
             start_date: Start date in YYYYMMDD format
             end_date: End date in YYYYMMDD format
             item_ids: List of sold item IDs
-            traffic_source: Optional traffic source filter
             batch_size: Number of items per batch (max 200)
 
         Returns:
@@ -257,8 +231,7 @@ class AnalyticsAPIClient(BaseAPIClient):
                 start_date=start_date,
                 end_date=end_date,
                 metrics=metrics,
-                listing_ids=batch,
-                traffic_source=traffic_source
+                listing_ids=batch
             )
 
             all_records.extend(records)
