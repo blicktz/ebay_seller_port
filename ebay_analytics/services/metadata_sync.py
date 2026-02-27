@@ -1,17 +1,17 @@
 """
 Metadata sync service.
 
-Fetches listing metadata from Inventory API and stores it in the listings_metadata table.
+Fetches listing metadata from Trading API and stores it in the listings_metadata table.
 """
 
 from typing import Dict, Any
-from ..api.inventory import InventoryAPIClient
+from ..api.trading import TradingAPIClient
 from ..db.repository import MetadataRepository
 from ..config import Config
 
 
 class MetadataSyncService:
-    """Service for syncing listing metadata from Inventory API."""
+    """Service for syncing listing metadata from Trading API."""
 
     def __init__(self, config: Config):
         """
@@ -21,29 +21,31 @@ class MetadataSyncService:
             config: Configuration object
         """
         self.config = config
-        self.inventory_client = InventoryAPIClient(config)
+        self.trading_client = TradingAPIClient(config)
         self.metadata_repo = MetadataRepository(config.db_path)
 
     def sync_metadata(self) -> Dict[str, Any]:
         """
-        Sync listing metadata from Inventory API.
+        Sync listing metadata from Trading API.
 
         Returns:
             Dictionary with sync statistics:
             {
-                'total_items': 150,
-                'items_updated': 150
+                'total_items': 500,
+                'items_updated': 500
             }
         """
         print(f"\n{'='*60}")
         print(f"METADATA SYNC")
         print(f"{'='*60}\n")
 
-        # Fetch metadata from Inventory API
+        # Fetch metadata from Trading API
         try:
-            metadata_list = self.inventory_client.get_inventory_metadata()
+            metadata_list = self.trading_client.get_active_listings_metadata()
         except Exception as e:
-            print(f"✗ Error fetching inventory metadata: {e}")
+            print(f"✗ Error fetching active listings metadata: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 'error': str(e),
                 'total_items': 0,
@@ -51,14 +53,14 @@ class MetadataSyncService:
             }
 
         if not metadata_list:
-            print(f"⚠ No inventory items found")
+            print(f"⚠ No active listings found")
             return {
                 'total_items': 0,
                 'items_updated': 0
             }
 
         print(f"\n📊 Metadata Summary:")
-        print(f"   Total items fetched: {len(metadata_list)}")
+        print(f"   Total active listings fetched: {len(metadata_list)}")
         print()
 
         # Store in database
@@ -79,7 +81,7 @@ class MetadataSyncService:
 
     def close(self):
         """Close API clients."""
-        self.inventory_client.close()
+        self.trading_client.close()
 
 
 if __name__ == "__main__":

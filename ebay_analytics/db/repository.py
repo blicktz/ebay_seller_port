@@ -34,7 +34,10 @@ class MetadataRepository:
         promoted_status: Optional[str] = None,
         quantity_available: Optional[int] = None,
         last_known_status: Optional[str] = None,
-        sold_date: Optional[str] = None
+        sold_date: Optional[str] = None,
+        current_price: Optional[float] = None,
+        start_price: Optional[float] = None,
+        buy_it_now_price: Optional[float] = None
     ) -> None:
         """
         Insert or update listing metadata.
@@ -48,6 +51,9 @@ class MetadataRepository:
             quantity_available: Quantity available
             last_known_status: Last known status ('active', 'sold', etc.)
             sold_date: Date item sold (YYYY-MM-DD)
+            current_price: Current listing price
+            start_price: Starting price
+            buy_it_now_price: Buy It Now price
         """
         conn = get_connection(self.db_path)
         cursor = conn.cursor()
@@ -55,9 +61,10 @@ class MetadataRepository:
         cursor.execute("""
             INSERT INTO listings_metadata (
                 item_id, title, category_name, start_date, promoted_status,
-                quantity_available, last_known_status, sold_date, status_checked_date
+                quantity_available, last_known_status, sold_date,
+                current_price, start_price, buy_it_now_price, status_checked_date
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(item_id) DO UPDATE SET
                 title = excluded.title,
                 category_name = COALESCE(excluded.category_name, category_name),
@@ -66,10 +73,14 @@ class MetadataRepository:
                 quantity_available = excluded.quantity_available,
                 last_known_status = COALESCE(excluded.last_known_status, last_known_status),
                 sold_date = COALESCE(excluded.sold_date, sold_date),
+                current_price = excluded.current_price,
+                start_price = excluded.start_price,
+                buy_it_now_price = excluded.buy_it_now_price,
                 status_checked_date = CURRENT_TIMESTAMP,
                 last_updated = CURRENT_TIMESTAMP
         """, (item_id, title, category_name, start_date, promoted_status,
-              quantity_available, last_known_status, sold_date))
+              quantity_available, last_known_status, sold_date,
+              current_price, start_price, buy_it_now_price))
 
         conn.commit()
         conn.close()
@@ -91,9 +102,10 @@ class MetadataRepository:
             cursor.execute("""
                 INSERT INTO listings_metadata (
                     item_id, title, category_name, start_date, promoted_status,
-                    quantity_available, last_known_status, sold_date, status_checked_date
+                    quantity_available, last_known_status, sold_date,
+                    current_price, start_price, buy_it_now_price, status_checked_date
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(item_id) DO UPDATE SET
                     title = excluded.title,
                     category_name = COALESCE(excluded.category_name, category_name),
@@ -102,6 +114,9 @@ class MetadataRepository:
                     quantity_available = excluded.quantity_available,
                     last_known_status = COALESCE(excluded.last_known_status, last_known_status),
                     sold_date = COALESCE(excluded.sold_date, sold_date),
+                    current_price = excluded.current_price,
+                    start_price = excluded.start_price,
+                    buy_it_now_price = excluded.buy_it_now_price,
                     status_checked_date = CURRENT_TIMESTAMP,
                     last_updated = CURRENT_TIMESTAMP
             """, (
@@ -112,7 +127,10 @@ class MetadataRepository:
                 listing.get('promoted_status'),
                 listing.get('quantity_available'),
                 listing.get('last_known_status'),
-                listing.get('sold_date')
+                listing.get('sold_date'),
+                listing.get('current_price'),
+                listing.get('start_price'),
+                listing.get('buy_it_now_price')
             ))
 
         conn.commit()
