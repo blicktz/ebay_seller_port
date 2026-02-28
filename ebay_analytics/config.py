@@ -6,6 +6,7 @@ Loads configuration from .env file and provides validation and type conversion.
 
 import os
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional, Tuple
 from pathlib import Path
 from dotenv import load_dotenv
@@ -215,6 +216,7 @@ class DateRangeParser:
     def get_date_range_last_n_days(days: int = 7) -> Tuple[str, str]:
         """
         Get date range for the last N days in YYYYMMDD format.
+        Uses USER_TIMEZONE from environment (defaults to America/Los_Angeles).
 
         Args:
             days: Number of days to look back
@@ -222,7 +224,8 @@ class DateRangeParser:
         Returns:
             Tuple of (start_date, end_date) in YYYYMMDD format
         """
-        end_date = datetime.now()
+        user_timezone = os.getenv('USER_TIMEZONE', 'America/Los_Angeles')
+        end_date = datetime.now(ZoneInfo(user_timezone))
         start_date = end_date - timedelta(days=days)
 
         return (

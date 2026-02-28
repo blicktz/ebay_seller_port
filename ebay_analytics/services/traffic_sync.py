@@ -7,6 +7,7 @@ including promoted/organic breakdown with proper batching.
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import time
 from ..api.analytics import AnalyticsAPIClient
 from ..db.repository import TrafficRepository, SoldItemsRepository, MetadataRepository
@@ -93,7 +94,7 @@ class TrafficSyncService:
         synced_dates = self.traffic_repo.get_synced_dates(start_date_iso, end_date_iso)
 
         # Get today's date (always re-sync today since data may change)
-        today = datetime.now().strftime('%Y%m%d')
+        today = datetime.now(ZoneInfo(self.config.user_timezone)).strftime('%Y%m%d')
 
         # Filter dates to skip already-synced (except today)
         dates_to_sync = []

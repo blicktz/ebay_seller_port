@@ -31,6 +31,7 @@ class MetadataRepository:
         title: str,
         category_name: Optional[str] = None,
         start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
         promoted_status: Optional[str] = None,
         quantity_available: Optional[int] = None,
         last_known_status: Optional[str] = None,
@@ -47,6 +48,7 @@ class MetadataRepository:
             title: Listing title
             category_name: Category name
             start_date: Listing start date (YYYY-MM-DD)
+            end_date: Listing end date (YYYY-MM-DD)
             promoted_status: Promoted status
             quantity_available: Quantity available
             last_known_status: Last known status ('active', 'sold', etc.)
@@ -60,15 +62,16 @@ class MetadataRepository:
 
         cursor.execute("""
             INSERT INTO listings_metadata (
-                item_id, title, category_name, start_date, promoted_status,
+                item_id, title, category_name, start_date, end_date, promoted_status,
                 quantity_available, last_known_status, sold_date,
                 current_price, start_price, buy_it_now_price, status_checked_date
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(item_id) DO UPDATE SET
                 title = excluded.title,
                 category_name = COALESCE(excluded.category_name, category_name),
                 start_date = COALESCE(excluded.start_date, start_date),
+                end_date = COALESCE(excluded.end_date, end_date),
                 promoted_status = COALESCE(excluded.promoted_status, promoted_status),
                 quantity_available = excluded.quantity_available,
                 last_known_status = COALESCE(excluded.last_known_status, last_known_status),
@@ -78,7 +81,7 @@ class MetadataRepository:
                 buy_it_now_price = excluded.buy_it_now_price,
                 status_checked_date = CURRENT_TIMESTAMP,
                 last_updated = CURRENT_TIMESTAMP
-        """, (item_id, title, category_name, start_date, promoted_status,
+        """, (item_id, title, category_name, start_date, end_date, promoted_status,
               quantity_available, last_known_status, sold_date,
               current_price, start_price, buy_it_now_price))
 
@@ -101,15 +104,16 @@ class MetadataRepository:
         for listing in listings:
             cursor.execute("""
                 INSERT INTO listings_metadata (
-                    item_id, title, category_name, start_date, promoted_status,
+                    item_id, title, category_name, start_date, end_date, promoted_status,
                     quantity_available, last_known_status, sold_date,
                     current_price, start_price, buy_it_now_price, status_checked_date
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(item_id) DO UPDATE SET
                     title = excluded.title,
                     category_name = COALESCE(excluded.category_name, category_name),
                     start_date = COALESCE(excluded.start_date, start_date),
+                    end_date = COALESCE(excluded.end_date, end_date),
                     promoted_status = COALESCE(excluded.promoted_status, promoted_status),
                     quantity_available = excluded.quantity_available,
                     last_known_status = COALESCE(excluded.last_known_status, last_known_status),
@@ -124,6 +128,7 @@ class MetadataRepository:
                 listing.get('title'),
                 listing.get('category_name'),
                 listing.get('start_date'),
+                listing.get('end_date'),
                 listing.get('promoted_status'),
                 listing.get('quantity_available'),
                 listing.get('last_known_status'),
@@ -167,17 +172,25 @@ class MetadataRepository:
         """
         Get all active listing IDs (not sold or ended).
 
+        A listing is considered active if:
+        - It hasn't been sold (sold_date IS NULL), AND
+        - It hasn't ended yet (end_date IS NULL OR end_date >= today)
+
+        Note: Listings ending today are considered active until end of day
+
         Returns:
             List of active item IDs
         """
         conn = get_connection(self.db_path)
         cursor = conn.cursor()
 
-        # Get listings that don't have a sold_date (still active)
+        # Get listings that are not sold and not ended
+        # Include listings ending today since they're active until end of day
         cursor.execute("""
             SELECT item_id
             FROM listings_metadata
             WHERE sold_date IS NULL
+            AND (end_date IS NULL OR end_date >= date('now', 'localtime'))
             ORDER BY item_id
         """)
 
@@ -494,6 +507,36 @@ class SoldItemsRepository:
             WHERE sold_date >= date('now', '-' || ? || ' days')
             ORDER BY item_id
         """, (days_back,))
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [row[0] for row in rows]
+
+    def get_synced_sold_dates(
+        self,
+        start_date: str,
+        end_date: str
+    ) -> List[str]:
+        """
+        Get list of dates that already have sold items in the database.
+
+        Args:
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
+
+        Returns:
+            List of dates (YYYY-MM-DD) that have at least one sold item record
+        """
+        conn = get_connection(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT DISTINCT sold_date
+            FROM sold_items_cache
+            WHERE sold_date BETWEEN ? AND ?
+            ORDER BY sold_date
+        """, (start_date, end_date))
 
         rows = cursor.fetchall()
         conn.close()

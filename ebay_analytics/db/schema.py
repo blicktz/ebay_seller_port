@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS listings_metadata (
     title TEXT NOT NULL,
     category_name TEXT,
     start_date TEXT,
+    end_date TEXT,
     promoted_status TEXT,
     quantity_available INTEGER,
 
@@ -24,6 +25,11 @@ CREATE TABLE IF NOT EXISTS listings_metadata (
     last_known_status TEXT,
     sold_date TEXT,
     status_checked_date DATETIME,
+
+    -- Price tracking
+    current_price REAL,
+    start_price REAL,
+    buy_it_now_price REAL,
 
     last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
 );

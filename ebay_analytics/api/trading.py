@@ -8,6 +8,7 @@ This is the official eBay-recommended API for retrieving all active listings.
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from .base import BaseAPIClient
 from ..config import Config
 
@@ -301,14 +302,31 @@ class TradingAPIClient(BaseAPIClient):
         start_time = get_text(item_elem, 'ebay:ListingDetails/ebay:StartTime')
         end_time = get_text(item_elem, 'ebay:ListingDetails/ebay:EndTime')
 
-        # Convert start time to YYYY-MM-DD format
+        # Convert start time to YYYY-MM-DD format (PST timezone)
         start_date = None
         if start_time:
             try:
-                dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-                start_date = dt.strftime('%Y-%m-%d')
+                # Parse UTC datetime
+                dt_utc = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                # Convert to PST
+                dt_pst = dt_utc.astimezone(ZoneInfo(self.config.user_timezone))
+                # Extract date in PST
+                start_date = dt_pst.strftime('%Y-%m-%d')
             except (ValueError, AttributeError):
                 start_date = start_time[:10] if len(start_time) >= 10 else None
+
+        # Convert end time to YYYY-MM-DD format (PST timezone)
+        end_date = None
+        if end_time:
+            try:
+                # Parse UTC datetime
+                dt_utc = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                # Convert to PST
+                dt_pst = dt_utc.astimezone(ZoneInfo(self.config.user_timezone))
+                # Extract date in PST
+                end_date = dt_pst.strftime('%Y-%m-%d')
+            except (ValueError, AttributeError):
+                end_date = end_time[:10] if len(end_time) >= 10 else None
 
         # Listing status
         listing_status = get_text(item_elem, 'ebay:SellingStatus/ebay:ListingStatus')
@@ -331,6 +349,7 @@ class TradingAPIClient(BaseAPIClient):
             'start_time': start_time,
             'start_date': start_date,
             'end_time': end_time,
+            'end_date': end_date,
             'listing_status': listing_status,
             'promoted_status': promoted_status,
             'last_known_status': 'active'  # All items from GetSellerList are active
@@ -423,6 +442,7 @@ class TradingAPIClient(BaseAPIClient):
                 'title': listing.get('title'),
                 'category_name': listing.get('category_name'),
                 'start_date': listing.get('start_date'),
+                'end_date': listing.get('end_date'),
                 'quantity_available': listing.get('quantity_available', 0),
                 'promoted_status': listing.get('promoted_status', 'Unknown'),
                 'last_known_status': listing.get('last_known_status', 'active'),

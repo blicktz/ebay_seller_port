@@ -31,6 +31,7 @@ class SoldItemsSyncService:
     def sync_sold_items(self, days_back: int = None) -> Dict[str, Any]:
         """
         Sync sold items from Fulfillment API for the last N days.
+        Uses skip logic to avoid re-downloading already-cached dates (except today).
 
         Args:
             days_back: Number of days to look back (default: from config, max 90)
@@ -62,16 +63,69 @@ class SoldItemsSyncService:
         end_dt = datetime.now(ZoneInfo(self.config.user_timezone))
         start_dt = end_dt - timedelta(days=days_back)
 
-        start_iso = DateRangeParser.to_iso8601_with_time(start_dt)
-        end_iso = DateRangeParser.to_iso8601_with_time(end_dt)
-
         start_date_str = DateRangeParser.to_iso_format(start_dt)
         end_date_str = DateRangeParser.to_iso_format(end_dt)
 
         print(f"Date range: {start_date_str} to {end_date_str}")
         print()
 
-        # Fetch sold items from Fulfillment API
+        # Get already-synced dates from database
+        synced_dates = self.sold_items_repo.get_synced_sold_dates(start_date_str, end_date_str)
+
+        # Get today's date (always re-sync today since data may change)
+        today = datetime.now(ZoneInfo(self.config.user_timezone)).strftime('%Y-%m-%d')
+
+        # Generate list of all dates in range
+        date_range = self._generate_date_range(start_date_str, end_date_str)
+        total_days = len(date_range)
+
+        # Filter dates to skip already-synced (except today)
+        dates_to_sync = []
+        dates_skipped = []
+        for date_str in date_range:
+            if date_str not in synced_dates or date_str == today:
+                dates_to_sync.append(date_str)
+            else:
+                dates_skipped.append(date_str)
+
+        if dates_skipped:
+            print(f"⏭  Skipping {len(dates_skipped)} already-synced dates:")
+            for skipped in dates_skipped[:5]:  # Show first 5
+                print(f"    {skipped}")
+            if len(dates_skipped) > 5:
+                print(f"    ... and {len(dates_skipped) - 5} more")
+            print()
+
+        days_to_sync = len(dates_to_sync)
+        print(f"📊 Will sync {days_to_sync} days (total days in range: {total_days})")
+        print()
+
+        if not dates_to_sync:
+            print("✓ All dates already synced - nothing to do!")
+            return {
+                'total_sold_items': 0,
+                'unique_items': 0,
+                'new_items_cached': 0,
+                'date_range': (start_date_str, end_date_str)
+            }
+
+        # Fetch sold items from Fulfillment API (only for dates to sync)
+        # Convert first and last date to sync into ISO8601 with time
+        first_date_to_sync = datetime.strptime(dates_to_sync[0], '%Y-%m-%d')
+        first_date_to_sync = first_date_to_sync.replace(hour=0, minute=0, second=0, tzinfo=ZoneInfo(self.config.user_timezone))
+
+        # For end date: use current time if today is included (to avoid future date error)
+        # Otherwise use end of last day
+        if dates_to_sync[-1] == today:
+            last_date_to_sync = datetime.now(ZoneInfo(self.config.user_timezone))
+        else:
+            last_date_to_sync = datetime.strptime(dates_to_sync[-1], '%Y-%m-%d')
+            last_date_to_sync = last_date_to_sync.replace(hour=23, minute=59, second=59, tzinfo=ZoneInfo(self.config.user_timezone))
+
+        start_iso = DateRangeParser.to_iso8601_with_time(first_date_to_sync)
+        end_iso = DateRangeParser.to_iso8601_with_time(last_date_to_sync)
+
+        print(f"Fetching sold items for {days_to_sync} days...")
         try:
             sold_items = self.fulfillment_client.get_sold_items_for_date_range(
                 start_iso,
@@ -81,7 +135,6 @@ class SoldItemsSyncService:
             print(f"✗ Error fetching sold items: {e}")
             return {
                 'error': str(e),
-                'total_orders': 0,
                 'total_sold_items': 0,
                 'unique_items': 0,
                 'new_items_cached': 0,
@@ -118,6 +171,30 @@ class SoldItemsSyncService:
         print(f"{'='*60}\n")
 
         return stats
+
+    def _generate_date_range(self, start_date: str, end_date: str) -> List[str]:
+        """
+        Generate list of dates in range (inclusive).
+
+        Args:
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
+
+        Returns:
+            List of date strings in YYYY-MM-DD format
+        """
+        # Parse dates
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+
+        # Generate all dates in range
+        dates = []
+        current_dt = start_dt
+        while current_dt <= end_dt:
+            dates.append(current_dt.strftime('%Y-%m-%d'))
+            current_dt += timedelta(days=1)
+
+        return dates
 
     def _update_metadata_for_sold_items(self, sold_items: List[Dict[str, Any]]) -> None:
         """
