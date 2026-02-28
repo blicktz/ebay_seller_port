@@ -163,6 +163,29 @@ class MetadataRepository:
 
         return [dict(row) for row in rows]
 
+    def get_active_listing_ids(self) -> List[str]:
+        """
+        Get all active listing IDs (not sold or ended).
+
+        Returns:
+            List of active item IDs
+        """
+        conn = get_connection(self.db_path)
+        cursor = conn.cursor()
+
+        # Get listings that don't have a sold_date (still active)
+        cursor.execute("""
+            SELECT item_id
+            FROM listings_metadata
+            WHERE sold_date IS NULL
+            ORDER BY item_id
+        """)
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [row[0] for row in rows]
+
 
 class TrafficRepository:
     """Repository for daily_traffic_facts table."""
@@ -316,6 +339,36 @@ class TrafficRepository:
         conn.close()
 
         return [dict(row) for row in rows]
+
+    def get_synced_dates(
+        self,
+        start_date: str,
+        end_date: str
+    ) -> List[str]:
+        """
+        Get list of dates that already have traffic data in the database.
+
+        Args:
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
+
+        Returns:
+            List of dates (YYYY-MM-DD) that have at least one traffic record
+        """
+        conn = get_connection(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT DISTINCT report_date
+            FROM daily_traffic_facts
+            WHERE report_date BETWEEN ? AND ?
+            ORDER BY report_date
+        """, (start_date, end_date))
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [row[0] for row in rows]
 
 
 class SoldItemsRepository:

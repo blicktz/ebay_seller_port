@@ -8,6 +8,7 @@ traffic data can be queried from the Analytics API.
 
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from .base import BaseAPIClient
 from ..config import Config
 from ..utils.url_encoding import build_fulfillment_filter
@@ -159,9 +160,14 @@ class FulfillmentAPIClient(BaseAPIClient):
             order_id = order.get('orderId', '')
             creation_date = order.get('creationDate', '')
 
-            # Parse date (ISO 8601 to YYYY-MM-DD)
+            # Parse date (ISO 8601 UTC to YYYY-MM-DD in user's timezone)
             try:
-                sold_date = datetime.fromisoformat(creation_date.replace('Z', '+00:00')).strftime('%Y-%m-%d')
+                # Parse UTC timestamp
+                dt_utc = datetime.fromisoformat(creation_date.replace('Z', '+00:00'))
+                # Convert to user's timezone (e.g., PST)
+                dt_local = dt_utc.astimezone(ZoneInfo(self.config.user_timezone))
+                # Extract date in local timezone
+                sold_date = dt_local.strftime('%Y-%m-%d')
             except (ValueError, AttributeError):
                 sold_date = creation_date[:10] if len(creation_date) >= 10 else ''
 

@@ -5,7 +5,8 @@ Fetches sold items from Fulfillment API and stores them in the sold_items_cache 
 This enables querying traffic data for sold listings via the Analytics API.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import List, Dict, Any
 from ..api.fulfillment import FulfillmentAPIClient
 from ..db.repository import SoldItemsRepository, MetadataRepository
@@ -57,8 +58,8 @@ class SoldItemsSyncService:
         print(f"SOLD ITEMS SYNC - Last {days_back} Days")
         print(f"{'='*60}\n")
 
-        # Calculate date range
-        end_dt = datetime.now(timezone.utc)
+        # Calculate date range in user's timezone (e.g., PST)
+        end_dt = datetime.now(ZoneInfo(self.config.user_timezone))
         start_dt = end_dt - timedelta(days=days_back)
 
         start_iso = DateRangeParser.to_iso8601_with_time(start_dt)

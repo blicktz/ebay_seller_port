@@ -149,23 +149,33 @@ class AnalyticsAPIClient(BaseAPIClient):
     def get_traffic_for_active_listings(
         self,
         start_date: str,
-        end_date: str
+        end_date: str,
+        item_ids: List[str],
+        batch_size: int = 200
     ) -> List[Dict[str, Any]]:
         """
-        Get traffic data for active listings (default behavior).
+        Get traffic data for active listings using listing_ids filter.
 
-        When no listing_ids filter is provided, the API returns data for active listings.
-
-        Note: traffic_source filter is NOT supported by the Analytics API.
+        Note: Without listing_ids filter, API only returns max 200 listings.
+        With listing_ids filter, we can retrieve all active listings by batching.
 
         Args:
             start_date: Start date in YYYYMMDD format
             end_date: End date in YYYYMMDD format
+            item_ids: List of active item IDs
+            batch_size: Number of items per batch (max 200)
 
         Returns:
             List of traffic records for active listings
+
+        Note:
+            Automatically batches requests if item_ids > 200.
         """
+        if not item_ids:
+            return []
+
         print(f"📊 Fetching active listings traffic...")
+        print(f"   Total active items: {len(item_ids)}")
 
         metrics = [
             'TOTAL_IMPRESSION_TOTAL',
@@ -174,11 +184,27 @@ class AnalyticsAPIClient(BaseAPIClient):
             'TRANSACTION'
         ]
 
-        return self.get_traffic_report_with_pagination(
-            start_date=start_date,
-            end_date=end_date,
-            metrics=metrics
-        )
+        all_records = []
+
+        # Batch items by batch_size (max 200 per API request)
+        for i in range(0, len(item_ids), batch_size):
+            batch = item_ids[i:i+batch_size]
+            batch_num = (i // batch_size) + 1
+            total_batches = (len(item_ids) + batch_size - 1) // batch_size
+
+            print(f"   Batch {batch_num}/{total_batches}: {len(batch)} items")
+
+            records = self.get_traffic_report_with_pagination(
+                start_date=start_date,
+                end_date=end_date,
+                metrics=metrics,
+                listing_ids=batch
+            )
+
+            all_records.extend(records)
+
+        print(f"   ✓ Total records retrieved: {len(all_records)}")
+        return all_records
 
     def get_traffic_for_sold_listings(
         self,

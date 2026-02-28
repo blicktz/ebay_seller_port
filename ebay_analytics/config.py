@@ -109,6 +109,16 @@ class Config:
         """Get rate limit time window in seconds (default: 60)."""
         return int(os.getenv('API_RATE_LIMIT_WINDOW', '60'))
 
+    @property
+    def api_call_delay_seconds(self) -> float:
+        """Get delay between API calls in seconds for day-by-day syncing (default: 5.0)."""
+        return float(os.getenv('API_CALL_DELAY_SECONDS', '5.0'))
+
+    @property
+    def user_timezone(self) -> str:
+        """Get user's timezone for date conversion (default: America/Los_Angeles for PST/PDT)."""
+        return os.getenv('USER_TIMEZONE', 'America/Los_Angeles')
+
     # Batching Configuration
     @property
     def sold_items_batch_size(self) -> int:
@@ -189,13 +199,16 @@ class DateRangeParser:
         Convert datetime to ISO 8601 format with timezone (for Fulfillment API).
 
         Args:
-            dt: datetime object
+            dt: datetime object (timezone-aware or naive)
 
         Returns:
-            Date string in ISO 8601 format (e.g., '2026-02-25T00:00:00.000Z')
+            Date string in ISO 8601 UTC format (e.g., '2026-02-25T00:00:00.000Z')
         """
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            # Convert timezone-aware datetime to UTC before formatting
+            dt = dt.astimezone(timezone.utc)
         return dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')
 
     @staticmethod
