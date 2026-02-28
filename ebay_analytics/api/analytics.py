@@ -9,6 +9,7 @@ Handles traffic_report endpoint with support for:
 """
 
 from typing import List, Dict, Any, Optional
+import time
 from .base import BaseAPIClient
 from ..config import Config
 from ..utils.url_encoding import build_analytics_filter
@@ -209,6 +210,12 @@ class AnalyticsAPIClient(BaseAPIClient):
 
             all_records.extend(records)
 
+            # Add delay between batches to avoid rate limiting (except after last batch)
+            if batch_num < total_batches:
+                delay = 3.0
+                print(f"   ⏱  Waiting {delay}s before next batch...")
+                time.sleep(delay)
+
         print(f"   ✓ Total records retrieved: {len(all_records)}")
         return all_records
 
@@ -273,6 +280,12 @@ class AnalyticsAPIClient(BaseAPIClient):
             )
 
             all_records.extend(records)
+
+            # Add delay between batches to avoid rate limiting (except after last batch)
+            if batch_num < total_batches:
+                delay = 3.0
+                print(f"   ⏱  Waiting {delay}s before next batch...")
+                time.sleep(delay)
 
         print(f"   ✓ Total records retrieved: {len(all_records)}")
         return all_records
