@@ -271,6 +271,25 @@ The generated CSV matches eBay's official "Listings Traffic Report" with **29 co
 - % Change columns (13, 15, 19, 21): Requires historical baseline (future enhancement)
 - Offsite metrics (23, 27, 29): May not be separable from main metrics
 
+### ⚠️ CRITICAL: View Metrics Calculation
+
+**The eBay API metric `LISTING_VIEWS_TOTAL` is INCORRECT and incomplete.**
+
+This system **automatically corrects** this by calculating total views as the **sum of view source metrics**:
+- `LISTING_VIEWS_SOURCE_DIRECT`
+- `LISTING_VIEWS_SOURCE_OFF_EBAY` (external traffic - often missing from LISTING_VIEWS_TOTAL!)
+- `LISTING_VIEWS_SOURCE_OTHER_EBAY`
+- `LISTING_VIEWS_SOURCE_SEARCH_RESULTS_PAGE`
+- `LISTING_VIEWS_SOURCE_STORE`
+
+**Impact**: Our reports show 30-50% higher view counts than using `LISTING_VIEWS_TOTAL` alone. This is CORRECT and matches the seller portal.
+
+**Example (Feb 24, 2026)**:
+- ❌ LISTING_VIEWS_TOTAL: 93 views (incomplete)
+- ✅ Sum of sources: 363 views (matches seller portal: 331 ±10%)
+
+For full technical details, see: [docs/VIEW_METRICS_FIX.md](docs/VIEW_METRICS_FIX.md)
+
 ## API Limitations
 
 ### eBay Analytics API

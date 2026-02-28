@@ -153,9 +153,14 @@ class ReportGenerator:
                 t.total_impressions AS total_impressions,
 
                 -- CALCULATED: Click-through rate
+                -- IMPORTANT: Using sum of view sources (CORRECT) instead of total_page_views (INCORRECT)
                 CASE
                     WHEN t.total_impressions > 0
-                    THEN ROUND((CAST(t.total_page_views AS REAL) / t.total_impressions) * 100, 2)
+                    THEN ROUND((CAST((COALESCE(t.views_source_direct, 0) +
+                                      COALESCE(t.views_source_off_ebay, 0) +
+                                      COALESCE(t.views_source_other_ebay, 0) +
+                                      COALESCE(t.views_source_search_results, 0) +
+                                      COALESCE(t.views_source_store, 0)) AS REAL) / t.total_impressions) * 100, 2)
                     ELSE NULL
                 END AS click_through_rate,
 
@@ -164,9 +169,19 @@ class ReportGenerator:
                 NULL AS pct_top_20_search_impressions,
 
                 -- CALCULATED: Sales conversion rate
+                -- IMPORTANT: Using sum of view sources (CORRECT) instead of total_page_views (INCORRECT)
                 CASE
-                    WHEN t.total_page_views > 0
-                    THEN ROUND((CAST(t.transactions AS REAL) / t.total_page_views) * 100, 2)
+                    WHEN (COALESCE(t.views_source_direct, 0) +
+                          COALESCE(t.views_source_off_ebay, 0) +
+                          COALESCE(t.views_source_other_ebay, 0) +
+                          COALESCE(t.views_source_search_results, 0) +
+                          COALESCE(t.views_source_store, 0)) > 0
+                    THEN ROUND((CAST(t.transactions AS REAL) /
+                                (COALESCE(t.views_source_direct, 0) +
+                                 COALESCE(t.views_source_off_ebay, 0) +
+                                 COALESCE(t.views_source_other_ebay, 0) +
+                                 COALESCE(t.views_source_search_results, 0) +
+                                 COALESCE(t.views_source_store, 0))) * 100, 2)
                     ELSE NULL
                 END AS sales_conversion_rate,
 
@@ -191,7 +206,15 @@ class ReportGenerator:
                 t.promoted_total_impressions AS total_promoted_impressions,
                 NULL AS total_promoted_offsite_impressions,
                 t.organic_total_impressions AS total_organic_impressions,
-                t.total_page_views AS total_page_views,
+
+                -- CORRECTED: Sum of view sources (matches seller portal)
+                -- Original t.total_page_views was INCORRECT and didn't match sum of sources
+                (COALESCE(t.views_source_direct, 0) +
+                 COALESCE(t.views_source_off_ebay, 0) +
+                 COALESCE(t.views_source_other_ebay, 0) +
+                 COALESCE(t.views_source_search_results, 0) +
+                 COALESCE(t.views_source_store, 0)) AS total_page_views,
+
                 t.promoted_page_views AS page_views_promoted_ebay,
                 NULL AS page_views_promoted_offsite,
                 t.organic_page_views AS page_views_organic_ebay,

@@ -53,28 +53,33 @@ def verify_view_sources():
             source_sum = direct + off_ebay + other_ebay + search + store
 
             print(f"  Records: {record_count}")
-            print(f"\n  Total Views (LISTING_VIEWS_TOTAL): {total_views:,}")
+            print(f"\n  ❌ INCORRECT - LISTING_VIEWS_TOTAL (API metric): {total_views:,}")
+            print(f"     (This value is incomplete and doesn't match seller portal)")
             print(f"\n  View Source Breakdown:")
             print(f"    Direct:         {direct:>8,}")
-            print(f"    Off-eBay:       {off_ebay:>8,}  <-- External traffic")
+            print(f"    Off-eBay:       {off_ebay:>8,}  <-- External traffic (was missing!)")
             print(f"    Other eBay:     {other_ebay:>8,}")
             print(f"    Search Results: {search:>8,}")
             print(f"    Store:          {store:>8,}")
             print(f"    {'─'*40}")
-            print(f"    Sum of sources: {source_sum:>8,}")
+            print(f"  ✅ CORRECT - Sum of sources: {source_sum:>8,}")
+            print(f"     (This is the accurate total that matches seller portal)")
 
             # Check if sources match total
             if source_sum > 0:
                 if abs(source_sum - total_views) <= 1:  # Allow for rounding
-                    print(f"\n  ✓ Source breakdown matches total views!")
+                    print(f"\n  ✓ Source breakdown matches LISTING_VIEWS_TOTAL!")
                 else:
                     diff = source_sum - total_views
-                    print(f"\n  ⚠ Difference: {diff:+,} ({diff/total_views*100:+.1f}%)")
+                    print(f"\n  ⚠ Discrepancy: Sum of sources is {diff:+,} views higher ({diff/source_sum*100:+.1f}%)")
+                    print(f"     This is EXPECTED - LISTING_VIEWS_TOTAL is incomplete")
+                    print(f"     ✅ USE SUM OF SOURCES for accurate total views")
 
-                # Show external traffic percentage
-                if total_views > 0:
-                    external_pct = (off_ebay / total_views) * 100
-                    print(f"  📊 External traffic: {external_pct:.1f}% of total views")
+                # Show external traffic percentage (using sum of sources as denominator)
+                if source_sum > 0:
+                    external_pct = (off_ebay / source_sum) * 100
+                    print(f"\n  📊 External (off-eBay) traffic: {external_pct:.1f}% of total views")
+                    print(f"     This captures {off_ebay:,} views that were previously missing")
             else:
                 print(f"\n  ⚠ No view source data captured yet")
 

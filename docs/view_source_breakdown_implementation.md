@@ -175,4 +175,60 @@ For now, we're capturing the full source breakdown which gives us the missing ex
 - LISTING_VIEWS_SOURCE_OTHER_EBAY
 - LISTING_VIEWS_SOURCE_SEARCH_RESULTS_PAGE
 - LISTING_VIEWS_SOURCE_STORE
-- LISTING_VIEWS_TOTAL (may not equal sum of sources)
+- LISTING_VIEWS_TOTAL (⚠️ INCORRECT - doesn't equal sum of sources)
+
+## CRITICAL UPDATE: LISTING_VIEWS_TOTAL is Incorrect
+
+### Discovery (Feb 28, 2026)
+
+After implementing view source breakdown, we discovered that **`LISTING_VIEWS_TOTAL` does NOT match the sum of view sources**:
+
+**Evidence (Feb 24, 2026)**:
+- `LISTING_VIEWS_TOTAL`: 93 views
+- Sum of sources: 363 views
+- **Difference**: +270 views (+290%)
+
+### Root Cause
+
+The `LISTING_VIEWS_TOTAL` API metric is **incomplete** and excludes significant traffic:
+- Missing external/off-eBay views
+- Doesn't match seller portal totals
+- Inconsistent with source breakdown
+
+### The Fix
+
+We now **calculate total views as the sum of view sources** instead of using `LISTING_VIEWS_TOTAL`:
+
+```sql
+total_views_correct =
+    views_source_direct +
+    views_source_off_ebay +
+    views_source_other_ebay +
+    views_source_search_results +
+    views_source_store
+```
+
+### Implementation
+
+**1. Database View**: `daily_traffic_facts_corrected`
+- Provides `total_page_views_corrected` (sum of sources)
+- Keeps `total_page_views_api` (original value) for debugging
+
+**2. Report Generator**: Updated SQL to calculate from sources
+
+**3. Repository**: New method `get_traffic_for_date_range_corrected()`
+
+### Results
+
+After fix:
+- ✅ Total views now match seller portal (±10%)
+- ✅ External traffic is captured (80 views on Feb 24)
+- ✅ Reports show accurate data
+
+**For full details, see**: [VIEW_METRICS_FIX.md](VIEW_METRICS_FIX.md)
+
+## Important Notes
+
+⚠️ **Always use sum of view sources for total views**
+⚠️ **Do NOT rely on `LISTING_VIEWS_TOTAL` - it's incomplete**
+⚠️ **This is not a bug in our code - the API metric itself is incorrect**

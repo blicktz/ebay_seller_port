@@ -365,6 +365,48 @@ class TrafficRepository:
 
         return [dict(row) for row in rows]
 
+    def get_traffic_for_date_range_corrected(
+        self,
+        start_date: str,
+        end_date: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Get traffic data for date range with corrected total_page_views.
+
+        This method queries from the daily_traffic_facts_corrected view which
+        calculates total_page_views as the sum of all view sources. This is
+        the CORRECT way to get total views as it matches the seller portal.
+
+        The original total_page_views from LISTING_VIEWS_TOTAL API metric is
+        incorrect and doesn't match the sum of view sources.
+
+        Args:
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
+
+        Returns:
+            List of dictionaries with corrected total_page_views_corrected field
+
+        Example:
+            >>> repo = TrafficRepository()
+            >>> data = repo.get_traffic_for_date_range_corrected('2026-02-24', '2026-02-26')
+            >>> print(data[0]['total_page_views_corrected'])  # Sum of sources
+            >>> print(data[0]['total_page_views_api'])        # Original API value
+        """
+        conn = get_connection(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT * FROM daily_traffic_facts_corrected
+            WHERE report_date BETWEEN ? AND ?
+            ORDER BY report_date DESC, item_id
+        """, (start_date, end_date))
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [dict(row) for row in rows]
+
     def get_synced_dates(
         self,
         start_date: str,

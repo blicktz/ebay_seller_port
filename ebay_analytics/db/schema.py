@@ -8,6 +8,7 @@ including tables for listing metadata, traffic facts, and sold items cache.
 import sqlite3
 from pathlib import Path
 from typing import Optional
+from .views import create_all_views
 
 
 # SQL statements for table creation
@@ -138,6 +139,10 @@ def init_database(db_path: str = "data/ebay_analytics.db") -> sqlite3.Connection
         # Create indexes
         for index_sql in CREATE_INDEXES:
             cursor.execute(index_sql)
+
+        # Create views
+        num_views = create_all_views(conn)
+        print(f"✓ Created {num_views} database view(s)")
 
         conn.commit()
         print(f"✓ Database initialized successfully at: {db_path}")
