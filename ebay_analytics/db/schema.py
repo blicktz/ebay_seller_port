@@ -49,6 +49,13 @@ CREATE TABLE IF NOT EXISTS daily_traffic_facts (
     total_page_views INTEGER,
     transactions INTEGER,
 
+    -- View breakdown by source (LISTING_VIEWS_SOURCE_*)
+    views_source_direct INTEGER,
+    views_source_off_ebay INTEGER,
+    views_source_other_ebay INTEGER,
+    views_source_search_results INTEGER,
+    views_source_store INTEGER,
+
     -- Promoted metrics (traffic_source=PROMOTED_LISTINGS)
     promoted_total_impressions INTEGER,
     promoted_search_impressions INTEGER,

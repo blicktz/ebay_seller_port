@@ -355,6 +355,12 @@ class TrafficSyncService:
                 'total_search_impressions': metrics.get('LISTING_IMPRESSION_SEARCH_RESULTS_PAGE'),
                 'total_page_views': metrics.get('LISTING_VIEWS_TOTAL'),
                 'transactions': metrics.get('TRANSACTION'),
+                # View breakdown by source
+                'views_source_direct': metrics.get('LISTING_VIEWS_SOURCE_DIRECT'),
+                'views_source_off_ebay': metrics.get('LISTING_VIEWS_SOURCE_OFF_EBAY'),
+                'views_source_other_ebay': metrics.get('LISTING_VIEWS_SOURCE_OTHER_EBAY'),
+                'views_source_search_results': metrics.get('LISTING_VIEWS_SOURCE_SEARCH_RESULTS_PAGE'),
+                'views_source_store': metrics.get('LISTING_VIEWS_SOURCE_STORE'),
                 # Promoted metrics - NOT available from Analytics API (set to NULL)
                 'promoted_total_impressions': None,
                 'promoted_search_impressions': None,
@@ -387,12 +393,17 @@ class TrafficSyncService:
 
         # Metrics are returned in the same order as requested:
         # ['TOTAL_IMPRESSION_TOTAL', 'LISTING_IMPRESSION_SEARCH_RESULTS_PAGE',
-        #  'LISTING_VIEWS_TOTAL', 'TRANSACTION']
+        #  'LISTING_VIEWS_TOTAL', 'TRANSACTION', 'LISTING_VIEWS_SOURCE_*']
         metric_names = [
             'TOTAL_IMPRESSION_TOTAL',
             'LISTING_IMPRESSION_SEARCH_RESULTS_PAGE',
             'LISTING_VIEWS_TOTAL',
-            'TRANSACTION'
+            'TRANSACTION',
+            'LISTING_VIEWS_SOURCE_DIRECT',
+            'LISTING_VIEWS_SOURCE_OFF_EBAY',
+            'LISTING_VIEWS_SOURCE_OTHER_EBAY',
+            'LISTING_VIEWS_SOURCE_SEARCH_RESULTS_PAGE',
+            'LISTING_VIEWS_SOURCE_STORE'
         ]
 
         for i, metric_name in enumerate(metric_names):

@@ -181,7 +181,13 @@ class AnalyticsAPIClient(BaseAPIClient):
             'TOTAL_IMPRESSION_TOTAL',
             'LISTING_IMPRESSION_SEARCH_RESULTS_PAGE',
             'LISTING_VIEWS_TOTAL',
-            'TRANSACTION'
+            'TRANSACTION',
+            # View breakdown by source
+            'LISTING_VIEWS_SOURCE_DIRECT',
+            'LISTING_VIEWS_SOURCE_OFF_EBAY',
+            'LISTING_VIEWS_SOURCE_OTHER_EBAY',
+            'LISTING_VIEWS_SOURCE_SEARCH_RESULTS_PAGE',
+            'LISTING_VIEWS_SOURCE_STORE'
         ]
 
         all_records = []
@@ -240,7 +246,13 @@ class AnalyticsAPIClient(BaseAPIClient):
             'TOTAL_IMPRESSION_TOTAL',
             'LISTING_IMPRESSION_SEARCH_RESULTS_PAGE',
             'LISTING_VIEWS_TOTAL',
-            'TRANSACTION'
+            'TRANSACTION',
+            # View breakdown by source
+            'LISTING_VIEWS_SOURCE_DIRECT',
+            'LISTING_VIEWS_SOURCE_OFF_EBAY',
+            'LISTING_VIEWS_SOURCE_OTHER_EBAY',
+            'LISTING_VIEWS_SOURCE_SEARCH_RESULTS_PAGE',
+            'LISTING_VIEWS_SOURCE_STORE'
         ]
 
         all_records = []

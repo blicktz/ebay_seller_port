@@ -295,16 +295,23 @@ class TrafficRepository:
                 INSERT INTO daily_traffic_facts (
                     item_id, report_date, listing_status,
                     total_impressions, total_search_impressions, total_page_views, transactions,
+                    views_source_direct, views_source_off_ebay, views_source_other_ebay,
+                    views_source_search_results, views_source_store,
                     promoted_total_impressions, promoted_search_impressions, promoted_page_views,
                     organic_total_impressions, organic_search_impressions, organic_page_views
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(item_id, report_date) DO UPDATE SET
                     listing_status = excluded.listing_status,
                     total_impressions = COALESCE(excluded.total_impressions, total_impressions),
                     total_search_impressions = COALESCE(excluded.total_search_impressions, total_search_impressions),
                     total_page_views = COALESCE(excluded.total_page_views, total_page_views),
                     transactions = COALESCE(excluded.transactions, transactions),
+                    views_source_direct = COALESCE(excluded.views_source_direct, views_source_direct),
+                    views_source_off_ebay = COALESCE(excluded.views_source_off_ebay, views_source_off_ebay),
+                    views_source_other_ebay = COALESCE(excluded.views_source_other_ebay, views_source_other_ebay),
+                    views_source_search_results = COALESCE(excluded.views_source_search_results, views_source_search_results),
+                    views_source_store = COALESCE(excluded.views_source_store, views_source_store),
                     promoted_total_impressions = COALESCE(excluded.promoted_total_impressions, promoted_total_impressions),
                     promoted_search_impressions = COALESCE(excluded.promoted_search_impressions, promoted_search_impressions),
                     promoted_page_views = COALESCE(excluded.promoted_page_views, promoted_page_views),
@@ -319,6 +326,11 @@ class TrafficRepository:
                 record.get('total_search_impressions'),
                 record.get('total_page_views'),
                 record.get('transactions'),
+                record.get('views_source_direct'),
+                record.get('views_source_off_ebay'),
+                record.get('views_source_other_ebay'),
+                record.get('views_source_search_results'),
+                record.get('views_source_store'),
                 record.get('promoted_total_impressions'),
                 record.get('promoted_search_impressions'),
                 record.get('promoted_page_views'),
