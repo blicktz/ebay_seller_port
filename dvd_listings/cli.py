@@ -127,7 +127,8 @@ def lookup_upcs_command(file_path, file_type, upc_column, batch_size, force_refr
             filepath=file_path,
             file_type=file_type,
             upc_column=upc_column,
-            force_refresh=force_refresh
+            force_refresh=force_refresh,
+            media_type=config.media_type
         )
 
         # Display summary
@@ -343,6 +344,24 @@ def clean_cache_command(dry_run):
                 click.echo(click.style(f"✓ Deleted {count} expired entries", fg='green'))
         else:
             click.echo(click.style("No expired entries found", fg='green'))
+
+    except Exception as e:
+        click.echo(click.style(f"✗ Error: {e}", fg='red'), err=True)
+        sys.exit(1)
+
+
+@cli.command('expire-all')
+def expire_all_command():
+    """Mark all entries in the cache as expired to keep historical records without exporting them again."""
+    try:
+        config = load_dvd_config()
+        from .db.schema import expire_all_cache
+        count = expire_all_cache(config.dvd_db_path)
+        
+        if count > 0:
+            click.echo(click.style(f"✓ Successfully expired {count} active entries", fg='green'))
+        else:
+            click.echo(click.style("No active entries found to expire", fg='yellow'))
 
     except Exception as e:
         click.echo(click.style(f"✗ Error: {e}", fg='red'), err=True)

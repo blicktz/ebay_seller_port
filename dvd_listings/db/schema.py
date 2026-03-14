@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS catalog_products (
     primary_image_url TEXT,
     additional_images TEXT,  -- JSON array
 
+    -- Media type
+    media_type TEXT DEFAULT 'DVD',  -- DVD, CD, VHS
+
     -- DVD-specific aspects
     actors TEXT,  -- JSON array
     directors TEXT,  -- JSON array
@@ -74,6 +77,7 @@ CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_catalog_fetched ON catalog_products(fetched_at);",
     "CREATE INDEX IF NOT EXISTS idx_catalog_expires ON catalog_products(cache_expires_at);",
     "CREATE INDEX IF NOT EXISTS idx_catalog_title ON catalog_products(title);",
+    "CREATE INDEX IF NOT EXISTS idx_catalog_media_type ON catalog_products(media_type);",
 
     # catalog_lookup_log indexes
     "CREATE INDEX IF NOT EXISTS idx_lookup_upc ON catalog_lookup_log(upc);",
@@ -233,6 +237,91 @@ def clean_expired_cache(
             print(f"Found {count} expired product(s) (dry run mode)")
 
         return count
+
+
+def expire_all_cache(
+    db_path: str = "data/dvd_catalog.db"
+) -> int:
+    """
+    Mark all active entries in the catalog cache as expired.
+    Keeps historical records in the DB while preventing future exports.
+
+    Args:
+        db_path: Path to SQLite database file
+
+    Returns:
+        Number of entries expired
+    """
+    import sqlite3
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+
+        # Count non-expired entries
+        cursor.execute("""
+            SELECT COUNT(*) FROM catalog_products
+            WHERE cache_expires_at >= datetime('now');
+        """)
+        count = cursor.fetchone()[0]
+
+        if count > 0:
+            cursor.execute("""
+                UPDATE catalog_products
+                SET cache_expires_at = datetime('now', '-1 second')
+                WHERE cache_expires_at >= datetime('now');
+            """)
+            conn.commit()
+            print(f"Expired {count} active product(s) in cache")
+
+        return count
+
+
+def migrate_add_media_type_column(
+    db_path: str = "data/dvd_catalog.db"
+) -> bool:
+    """
+    Add media_type column to existing catalog_products table.
+
+    Safe to call on databases that already have the column.
+
+    Args:
+        db_path: Path to SQLite database file
+
+    Returns:
+        True if migration was applied, False if column already exists
+
+    Example:
+        >>> migrate_add_media_type_column('data/dvd_catalog.db')
+        Added media_type column to catalog_products
+        True
+    """
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+
+        # Check if column already exists
+        cursor.execute("PRAGMA table_info(catalog_products);")
+        columns = [row[1] for row in cursor.fetchall()]
+
+        if 'media_type' in columns:
+            print("  media_type column already exists, skipping migration")
+            return False
+
+        # Add the column
+        print("  Adding media_type column to catalog_products...")
+        cursor.execute("""
+            ALTER TABLE catalog_products
+            ADD COLUMN media_type TEXT DEFAULT 'DVD';
+        """)
+
+        # Create index
+        print("  Creating index on media_type...")
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_catalog_media_type
+            ON catalog_products(media_type);
+        """)
+
+        conn.commit()
+        print("  ✓ Migration completed: media_type column added")
+        return True
 
 
 if __name__ == "__main__":

@@ -72,7 +72,8 @@ class CatalogLookupService:
         self,
         upcs: List[str],
         force_refresh: bool = False,
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[callable] = None,
+        media_type: str = 'DVD'
     ) -> LookupSummary:
         """
         Look up multiple UPCs in eBay catalog.
@@ -84,6 +85,7 @@ class CatalogLookupService:
             upcs: List of UPC codes to look up
             force_refresh: If True, ignore cache and fetch fresh data
             progress_callback: Optional callback function(current, total, message)
+            media_type: Media type (DVD, CD, VHS) - from MEDIA_TYPE env var
 
         Returns:
             LookupSummary with results and statistics
@@ -166,8 +168,8 @@ class CatalogLookupService:
 
                     for product_data in products:
                         try:
-                            # Convert API response to CatalogProduct
-                            product = CatalogProduct.from_api_response(product_data)
+                            # Convert API response to CatalogProduct with media type from env
+                            product = CatalogProduct.from_api_response(product_data, media_type=media_type)
 
                             # Save to database
                             self.repository.save_product(product)
@@ -229,7 +231,8 @@ class CatalogLookupService:
         filepath: str,
         file_type: Optional[str] = None,
         upc_column: str = 'upc',
-        force_refresh: bool = False
+        force_refresh: bool = False,
+        media_type: str = 'DVD'
     ) -> LookupSummary:
         """
         Load UPCs from file and perform catalog lookup.
@@ -285,7 +288,8 @@ class CatalogLookupService:
         # Perform lookup
         return self.lookup_upcs(
             upcs=load_result.upcs,
-            force_refresh=force_refresh
+            force_refresh=force_refresh,
+            media_type=media_type
         )
 
     def get_summary_report(self, summary: LookupSummary) -> str:

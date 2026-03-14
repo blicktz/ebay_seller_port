@@ -51,6 +51,11 @@ class DVDConfig(BaseConfig):
         """Get default export path for CSV results (default: data/dvd_exports)."""
         return os.getenv('DVD_EXPORT_PATH', 'data/dvd_exports')
 
+    @property
+    def media_type(self) -> str:
+        """Get media type (DVD, CD, or VHS) from environment (default: DVD)."""
+        return os.getenv('MEDIA_TYPE', 'DVD').upper()
+
 
 def load_dvd_config(env_file: str = None) -> DVDConfig:
     """

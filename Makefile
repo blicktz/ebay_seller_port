@@ -1,7 +1,7 @@
 # eBay Seller Analytics - Makefile
 # Provides convenient targets for running analytics tasks with configurable date ranges
 
-.PHONY: help install init-db sync-metadata sync-sold-items sync-traffic generate-report full-sync clean-db verify test dvd-init-db dvd-lookup dvd-stats dvd-export dvd-clean-cache dvd-not-found dvd-generate-csv
+.PHONY: help install init-db sync-metadata sync-sold-items sync-traffic generate-report full-sync clean-db verify test dvd-init-db dvd-lookup dvd-stats dvd-export dvd-clean-cache dvd-expire-all dvd-not-found generate-csv dvd-generate-csv
 
 # Configuration variables (can be overridden: make sync-traffic START_DATE=20260201)
 START_DATE ?= $(shell date -v-7d +%Y%m%d 2>/dev/null || date -d "7 days ago" +%Y%m%d 2>/dev/null)
@@ -12,7 +12,7 @@ OUTPUT_FILE ?= reports/traffic_report_$(shell date +%Y%m%d_%H%M%S).csv
 DB_PATH ?= data/ebay_analytics.db
 
 # DVD Listing Automation variables
-DVD_FILE ?= upcs.txt
+DVD_FILE ?= inputs/VHS-0314-1413.txt
 DVD_DB_PATH ?= data/dvd_catalog.db
 DVD_BATCH_SIZE ?= 20
 DVD_EXPORT_FILE ?= data/dvd_exports/catalog_$(shell date +%Y%m%d_%H%M%S).csv
@@ -46,14 +46,15 @@ help:
 	@echo "  make test              Run unit tests"
 	@echo "  make help              Show this help message"
 	@echo ""
-	@echo "$(COLOR_GREEN)DVD Listing Automation:$(COLOR_RESET)"
-	@echo "  make dvd-init-db       Initialize DVD catalog database"
+	@echo "$(COLOR_GREEN)Media Listing Automation (DVD/CD/VHS):$(COLOR_RESET)"
+	@echo "  make dvd-init-db       Initialize media catalog database"
 	@echo "  make dvd-lookup        Look up UPCs from file (FILE=upcs.txt)"
-	@echo "  make dvd-stats         Show DVD catalog statistics"
-	@echo "  make dvd-export        Export DVD catalog to CSV"
+	@echo "  make dvd-stats         Show catalog statistics"
+	@echo "  make dvd-export        Export catalog to CSV"
 	@echo "  make dvd-not-found     List UPCs not found in catalog"
 	@echo "  make dvd-clean-cache   Remove expired cache entries"
-	@echo "  make dvd-generate-csv  Generate eBay bulk upload draft CSV"
+	@echo "  make dvd-expire-all    Mark all entries as expired (keep history)"
+	@echo "  make generate-csv      Generate eBay bulk upload CSV (set MEDIA_TYPE in .env)"
 	@echo ""
 	@echo "$(COLOR_YELLOW)Date Range Configuration:$(COLOR_RESET)"
 	@echo "  START_DATE=$(START_DATE) (default: 7 days ago)"
@@ -189,6 +190,13 @@ dvd-clean-cache:
 	@echo "$(COLOR_BLUE)Cleaning expired cache entries...$(COLOR_RESET)"
 	poetry run python -m dvd_listings.cli clean-cache
 
-dvd-generate-csv:
-	@echo "$(COLOR_BLUE)Generating eBay bulk upload draft CSV...$(COLOR_RESET)"
+dvd-expire-all:
+	@echo "$(COLOR_BLUE)Expiring all active cache entries...$(COLOR_RESET)"
+	poetry run python -m dvd_listings.cli expire-all
+
+generate-csv:
+	@echo "$(COLOR_BLUE)Generating eBay bulk upload draft CSV (Media Type: $${MEDIA_TYPE:-DVD})...$(COLOR_RESET)"
 	poetry run python scripts/generate_ebay_draft.py
+
+# Backward compatibility alias
+dvd-generate-csv: generate-csv

@@ -65,14 +65,14 @@ class CatalogRepository:
             # Upsert (INSERT OR REPLACE)
             cursor.execute("""
                 INSERT OR REPLACE INTO catalog_products (
-                    epid, upc, all_gtins, title, brand,
+                    epid, upc, all_gtins, title, brand, media_type,
                     primary_image_url, additional_images,
                     actors, directors, studio, release_year, format, genre, rating, region_code,
                     aspects_json, primary_category_id, category_name,
                     product_api_url, product_web_url,
                     fetched_at, cache_expires_at, fetch_source
                 ) VALUES (
-                    :epid, :upc, :all_gtins, :title, :brand,
+                    :epid, :upc, :all_gtins, :title, :brand, :media_type,
                     :primary_image_url, :additional_images,
                     :actors, :directors, :studio, :release_year, :format, :genre, :rating, :region_code,
                     :aspects_json, :primary_category_id, :category_name,
@@ -274,7 +274,8 @@ class CatalogRepository:
     def get_all_products(
         self,
         include_expired: bool = False,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        media_type: Optional[str] = None
     ) -> List[CatalogProduct]:
         """
         Get all catalog products from the database.
@@ -282,31 +283,43 @@ class CatalogRepository:
         Args:
             include_expired: If False, only return non-expired cached entries
             limit: Optional limit on number of products to return
+            media_type: Optional filter by media type (DVD, CD, VHS)
 
         Returns:
             List of CatalogProduct instances
 
         Example:
-            >>> products = repo.get_all_products(limit=100)
+            >>> products = repo.get_all_products(limit=100, media_type='CD')
             >>> for product in products:
             ...     print(f"{product.upc}: {product.title}")
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
-            if include_expired:
-                query = "SELECT * FROM catalog_products ORDER BY fetched_at DESC"
+            conditions = []
+            params = []
+
+            # Cache expiration filter
+            if not include_expired:
+                conditions.append("(cache_expires_at IS NULL OR cache_expires_at > datetime('now'))")
+
+            # Media type filter
+            if media_type:
+                conditions.append("media_type = ?")
+                params.append(media_type)
+
+            # Build query
+            if conditions:
+                where_clause = " WHERE " + " AND ".join(conditions)
             else:
-                query = """
-                    SELECT * FROM catalog_products
-                    WHERE cache_expires_at IS NULL OR cache_expires_at > datetime('now')
-                    ORDER BY fetched_at DESC
-                """
+                where_clause = ""
+
+            query = f"SELECT * FROM catalog_products{where_clause} ORDER BY fetched_at DESC"
 
             if limit:
                 query += f" LIMIT {limit}"
 
-            cursor.execute(query)
+            cursor.execute(query, params)
             rows = cursor.fetchall()
 
             return [CatalogProduct.from_db_row(dict(row)) for row in rows]

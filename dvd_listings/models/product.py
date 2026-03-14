@@ -87,6 +87,9 @@ class CatalogProduct:
     title: str = ""
     brand: Optional[str] = None
 
+    # Media type (DVD, CD, VHS)
+    media_type: str = "DVD"
+
     # Images
     primary_image_url: Optional[str] = None
     additional_images: List[str] = field(default_factory=list)
@@ -110,12 +113,17 @@ class CatalogProduct:
     cache_expires_at: Optional[datetime] = None
 
     @classmethod
-    def from_api_response(cls, product_summary: Dict[str, Any]) -> 'CatalogProduct':
+    def from_api_response(
+        cls,
+        product_summary: Dict[str, Any],
+        media_type: str = 'DVD'
+    ) -> 'CatalogProduct':
         """
         Create CatalogProduct from eBay Catalog API product summary.
 
         Args:
             product_summary: Product summary object from API search results
+            media_type: Media type (DVD, CD, VHS) - defaults to DVD
 
         Returns:
             CatalogProduct instance
@@ -158,12 +166,16 @@ class CatalogProduct:
         # Store full aspects as JSON for flexibility
         aspects_json = json.dumps(aspects_array) if aspects_array else None
 
+        # Media type is passed as parameter (from MEDIA_TYPE env var)
+        # No auto-detection - user explicitly sets what they're looking up
+
         return cls(
             epid=product_summary.get('epid', ''),
             upc=upc,
             all_gtins=all_gtins,
             title=product_summary.get('title', ''),
             brand=product_summary.get('brand'),
+            media_type=media_type,
             primary_image_url=primary_image_url,
             additional_images=additional_images,
             dvd_aspects=dvd_aspects,
@@ -186,6 +198,7 @@ class CatalogProduct:
             'all_gtins': json.dumps(self.all_gtins),
             'title': self.title,
             'brand': self.brand,
+            'media_type': self.media_type,
             'primary_image_url': self.primary_image_url,
             'additional_images': json.dumps(self.additional_images),
             'actors': json.dumps(self.dvd_aspects.actors) if self.dvd_aspects else None,
@@ -250,6 +263,7 @@ class CatalogProduct:
             all_gtins=all_gtins,
             title=row.get('title', ''),
             brand=row.get('brand'),
+            media_type=row.get('media_type', 'DVD'),
             primary_image_url=row.get('primary_image_url'),
             additional_images=additional_images,
             dvd_aspects=dvd_aspects,
