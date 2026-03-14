@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import time
 from ..api.analytics import AnalyticsAPIClient
+from ..api.base import RateLimitExceededError, calculate_wait_time
 from ..db.repository import TrafficRepository, SoldItemsRepository, MetadataRepository
 from ..config import Config, DateRangeParser
 
@@ -29,6 +30,82 @@ class TrafficSyncService:
         self.traffic_repo = TrafficRepository(config.db_path)
         self.sold_items_repo = SoldItemsRepository(config.db_path)
         self.metadata_repo = MetadataRepository(config.db_path)
+
+    def _wait_for_rate_limit_reset(
+        self,
+        error: RateLimitExceededError,
+        max_wait_seconds: int = 86400
+    ) -> bool:
+        """
+        Wait intelligently for rate limit to reset, then resume.
+
+        Args:
+            error: The RateLimitExceededError with reset information
+            max_wait_seconds: Maximum time to wait (default: 24 hours)
+
+        Returns:
+            True if we should resume, False if we should abort
+        """
+        print(f"\n⏸️  RATE LIMIT HIT: {error.message}")
+
+        if not error.reset_time:
+            print("   ⚠️  No reset time provided. Using default 5-minute wait.")
+            wait_seconds = 300
+        else:
+            wait_seconds = calculate_wait_time(error.reset_time)
+
+        # Check if wait time is reasonable
+        if wait_seconds > max_wait_seconds:
+            print(f"   ❌ Reset time is {wait_seconds/3600:.1f} hours away (max: {max_wait_seconds/3600:.1f} hours).")
+            print(f"   This exceeds maximum wait time. Script will abort.")
+            return False
+
+        if wait_seconds < 0:
+            print(f"   ⚠️  Reset time appears to be in the past. Retrying immediately.")
+            return True
+
+        # Display wait information
+        limit_description = {
+            "short-duration": "5-minute rate limit",
+            "daily": "daily rate limit",
+            "unknown": "rate limit"
+        }.get(error.limit_type, "rate limit")
+
+        print(f"   Limit type: {limit_description}")
+        print(f"   Resets at: {error.reset_time}")
+        print(f"   Wait time: {wait_seconds} seconds ({wait_seconds/60:.1f} minutes)")
+        print(f"\n   🕐 Pausing script to respect {limit_description}...")
+        print(f"   The script will automatically resume when the quota resets.")
+        print(f"   You can safely leave this running.\n")
+
+        # Add small buffer to ensure quota has definitely reset
+        buffer_seconds = 10
+        total_wait = wait_seconds + buffer_seconds
+
+        # Wait with progress updates
+        start_time = time.time()
+        last_update = 0
+
+        while time.time() - start_time < total_wait:
+            elapsed = int(time.time() - start_time)
+            remaining = total_wait - elapsed
+
+            # Update every 30 seconds for short waits, every 5 minutes for long waits
+            update_interval = 30 if total_wait < 600 else 300
+
+            if elapsed - last_update >= update_interval:
+                if remaining >= 3600:
+                    print(f"   ⏳ Waiting... {remaining/3600:.1f} hours remaining until resume")
+                elif remaining >= 60:
+                    print(f"   ⏳ Waiting... {remaining/60:.0f} minutes remaining until resume")
+                else:
+                    print(f"   ⏳ Waiting... {remaining} seconds remaining until resume")
+                last_update = elapsed
+
+            time.sleep(1)  # Check every second
+
+        print(f"   ✓ Rate limit should have reset. Resuming operations...")
+        return True
 
     def _generate_date_range(self, start_date: str, end_date: str) -> List[str]:
         """
@@ -133,8 +210,14 @@ class TrafficSyncService:
             'sold_listings': 0,
             'total_records': 0,
             'total_days': days_to_sync,
-            'date_range': (start_date, end_date)
+            'date_range': (start_date, end_date),
+            'rate_limit_pauses': 0
         }
+
+        # Get max wait configuration (default to 24 hours)
+        max_wait_seconds = getattr(self.config, 'api_rate_limit_max_wait_seconds', 86400)
+        max_rate_limit_waits = getattr(self.config, 'api_rate_limit_max_wait_count', 10)
+        rate_limit_wait_count = 0
 
         # Loop through each day to sync
         for day_idx, day_str in enumerate(dates_to_sync, 1):
@@ -142,18 +225,64 @@ class TrafficSyncService:
             print(f"📅 Day {day_idx}/{days_to_sync}: {day_str}")
             print(f"{'='*60}\n")
 
-            # Sync active listings for this day
+            # Sync active listings for this day (with rate limit handling)
             print(f"🔵 Syncing ACTIVE listings...")
-            active_stats = self._sync_active_listings_traffic(day_str, day_str)
-            stats['active_listings'] += active_stats['total_records']
-            print(f"   ✓ {active_stats['total_records']} active records")
+            while True:
+                try:
+                    active_stats = self._sync_active_listings_traffic(day_str, day_str)
+                    stats['active_listings'] += active_stats['total_records']
+                    print(f"   ✓ {active_stats['total_records']} active records")
+                    break  # Success, exit retry loop
 
-            # Sync sold listings for this day
+                except RateLimitExceededError as e:
+                    # Check if we've hit max wait attempts
+                    if rate_limit_wait_count >= max_rate_limit_waits:
+                        print(f"\n❌ Hit rate limit {rate_limit_wait_count} times. Aborting to prevent infinite loop.")
+                        print(f"   Successfully synced {day_idx - 1} of {days_to_sync} days.")
+                        return stats
+
+                    rate_limit_wait_count += 1
+                    stats['rate_limit_pauses'] += 1
+
+                    # Wait for rate limit to reset
+                    should_resume = self._wait_for_rate_limit_reset(e, max_wait_seconds)
+
+                    if not should_resume:
+                        print(f"   Successfully synced {day_idx - 1} of {days_to_sync} days before aborting.")
+                        return stats
+
+                    # Retry after waiting
+                    print(f"\n   🔄 Retrying day {day_str} active listings...")
+
+            # Sync sold listings for this day (with rate limit handling)
             if include_sold and self.config.sync_sold_items_enabled:
                 print(f"🟢 Syncing SOLD listings...")
-                sold_stats = self._sync_sold_listings_traffic(day_str, day_str)
-                stats['sold_listings'] += sold_stats['total_records']
-                print(f"   ✓ {sold_stats['total_records']} sold records")
+                while True:
+                    try:
+                        sold_stats = self._sync_sold_listings_traffic(day_str, day_str)
+                        stats['sold_listings'] += sold_stats['total_records']
+                        print(f"   ✓ {sold_stats['total_records']} sold records")
+                        break  # Success, exit retry loop
+
+                    except RateLimitExceededError as e:
+                        # Check if we've hit max wait attempts
+                        if rate_limit_wait_count >= max_rate_limit_waits:
+                            print(f"\n❌ Hit rate limit {rate_limit_wait_count} times. Aborting to prevent infinite loop.")
+                            print(f"   Successfully synced {day_idx - 1} of {days_to_sync} days.")
+                            return stats
+
+                        rate_limit_wait_count += 1
+                        stats['rate_limit_pauses'] += 1
+
+                        # Wait for rate limit to reset
+                        should_resume = self._wait_for_rate_limit_reset(e, max_wait_seconds)
+
+                        if not should_resume:
+                            print(f"   Successfully synced {day_idx - 1} of {days_to_sync} days before aborting.")
+                            return stats
+
+                        # Retry after waiting
+                        print(f"\n   🔄 Retrying day {day_str} sold listings...")
 
             # Update total
             day_total = active_stats['total_records'] + (sold_stats.get('total_records', 0) if include_sold and self.config.sync_sold_items_enabled else 0)
@@ -163,18 +292,31 @@ class TrafficSyncService:
 
             # Add delay before next day (except for last day)
             if day_idx < days_to_sync:
-                delay = self.config.api_call_delay_seconds
-                print(f"   ⏱  Waiting {delay}s before next day...")
+                delay = self.config.api_call_delay_between_days
+                if self.config.api_rate_limit_safe_mode:
+                    delay *= 1.5  # Add 50% more delay in safe mode
+                print(f"   ⏱  Waiting {delay:.1f}s before next day...")
                 time.sleep(delay)
 
         print(f"\n{'='*60}")
         print(f"✓ Traffic sync completed successfully")
+        if stats['rate_limit_pauses'] > 0:
+            print(f"   (Paused {stats['rate_limit_pauses']} time(s) for rate limit resets)")
         print(f"{'='*60}")
         print(f"  Active listings: {stats['active_listings']} records")
         print(f"  Sold listings: {stats['sold_listings']} records")
         print(f"  Total: {stats['total_records']} records")
         print(f"  Days synced: {total_days}")
         print(f"{'='*60}\n")
+
+        # Display API usage statistics
+        print(f"📊 API Usage Statistics:")
+        session_stats = self.analytics_client.get_session_stats()
+        print(f"   Total API calls: {session_stats['total_calls']}")
+        print(f"   Duration: {session_stats['duration_seconds']:.1f} seconds")
+        print(f"   Rate: {session_stats['calls_per_minute']:.2f} calls/minute")
+        print(f"   Remaining daily quota (estimated): {session_stats['estimated_remaining_daily']}")
+        print()
 
         return stats
 
@@ -216,6 +358,9 @@ class TrafficSyncService:
                 item_ids=active_item_ids,
                 batch_size=batch_size
             )
+        except RateLimitExceededError:
+            # Let rate limit errors propagate up to be handled by wait-and-resume
+            raise
         except Exception as e:
             print(f"   ✗ Error: {e}")
             records = []
@@ -285,6 +430,9 @@ class TrafficSyncService:
                 item_ids=sold_item_ids,
                 batch_size=batch_size
             )
+        except RateLimitExceededError:
+            # Let rate limit errors propagate up to be handled by wait-and-resume
+            raise
         except Exception as e:
             print(f"   ✗ Error: {e}")
             records = []

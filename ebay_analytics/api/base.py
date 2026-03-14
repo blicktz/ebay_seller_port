@@ -8,7 +8,36 @@ error handling, and rate limiting for all eBay API clients.
 import time
 import requests
 from typing import Dict, Optional, Any
+from datetime import datetime
 from ..config import Config
+
+
+def calculate_wait_time(reset_time_str: str) -> int:
+    """
+    Calculate seconds to wait until rate limit resets.
+
+    Args:
+        reset_time_str: ISO 8601 timestamp or Unix epoch
+
+    Returns:
+        Seconds to wait (minimum 1)
+    """
+    try:
+        # Try parsing as ISO 8601
+        reset_dt = datetime.fromisoformat(reset_time_str.replace('Z', '+00:00'))
+        now_dt = datetime.now(reset_dt.tzinfo)
+        wait_seconds = int((reset_dt - now_dt).total_seconds())
+
+    except (ValueError, AttributeError):
+        try:
+            # Try parsing as Unix timestamp
+            reset_timestamp = int(reset_time_str)
+            wait_seconds = reset_timestamp - int(time.time())
+        except (ValueError, TypeError):
+            # Default fallback: 5 minutes
+            wait_seconds = 300
+
+    return max(1, wait_seconds)  # Always wait at least 1 second
 
 
 class APIError(Exception):
@@ -28,6 +57,26 @@ class AuthenticationError(APIError):
 class RateLimitError(APIError):
     """Raised when rate limit is exceeded (429)."""
     pass
+
+
+class RateLimitExceededError(APIError):
+    """
+    Raised when eBay API rate limit is exceeded.
+    Contains reset time information for intelligent waiting.
+    """
+    def __init__(
+        self,
+        message: str,
+        reset_time: Optional[str] = None,
+        time_window: Optional[int] = None,
+        limit_type: str = "unknown",
+        status_code: Optional[int] = None,
+        response: Optional[requests.Response] = None
+    ):
+        super().__init__(message, status_code, response)
+        self.reset_time = reset_time
+        self.time_window = time_window  # Seconds (300 or 86400)
+        self.limit_type = limit_type    # "short-duration" or "daily"
 
 
 class NotFoundError(APIError):
@@ -56,6 +105,12 @@ class BaseAPIClient:
         self.config = config
         self.session = requests.Session()
         self.call_history = []  # Track API call timestamps for rate limiting
+
+        # Session statistics tracking
+        self.api_call_count = 0
+        self.session_start_time = time.time()
+        self.api_call_history = []  # List of (timestamp, url) tuples
+
         self._setup_session()
 
     def _setup_session(self):
@@ -130,8 +185,40 @@ class BaseAPIClient:
                 response=response
             )
         elif response.status_code == 429:
-            raise RateLimitError(
+            # Parse rate limit information from error response
+            reset_time = None
+            limit_type = "unknown"
+            time_window = None
+
+            try:
+                error_data = response.json()
+                error_msg = error_message.lower()
+
+                # Try to extract reset time from error parameters
+                if 'errors' in error_data and error_data['errors']:
+                    error_obj = error_data['errors'][0]
+                    if 'parameters' in error_obj:
+                        for param in error_obj['parameters']:
+                            if param.get('name') == 'resetTime':
+                                reset_time = param.get('value')
+                                break
+
+                # Determine limit type from error message
+                if "daily" in error_msg:
+                    limit_type = "daily"
+                    time_window = 86400
+                elif "minute" in error_msg or "short" in error_msg:
+                    limit_type = "short-duration"
+                    time_window = 300
+
+            except (ValueError, KeyError):
+                pass
+
+            raise RateLimitExceededError(
                 f"Rate limit exceeded: {error_message}",
+                reset_time=reset_time,
+                time_window=time_window,
+                limit_type=limit_type,
                 status_code=429,
                 response=response
             )
@@ -211,6 +298,10 @@ class BaseAPIClient:
         # Check rate limit before making request
         self._check_rate_limit(url)
 
+        # Track this API call for session statistics
+        self.api_call_count += 1
+        self.api_call_history.append((time.time(), url))
+
         request_headers = self._get_headers(headers)
 
         for attempt in range(max_retries + 1):
@@ -227,8 +318,12 @@ class BaseAPIClient:
 
                 return self._handle_response(response)
 
+            except RateLimitExceededError:
+                # Don't retry here - let caller handle wait-and-resume
+                raise
+
             except RateLimitError as e:
-                # Always retry on rate limit errors
+                # Old-style rate limit error (shouldn't happen, but keep for backwards compatibility)
                 if attempt < max_retries:
                     wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
                     print(f"⚠ Rate limit hit, waiting {wait_time:.1f}s before retry {attempt + 1}/{max_retries}...")
@@ -305,6 +400,25 @@ class BaseAPIClient:
             Parsed JSON response
         """
         return self._make_request_with_retry('POST', url, data=data, params=params, headers=headers, **kwargs)
+
+    def get_session_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics for current API session.
+
+        Returns:
+            Dictionary with session statistics:
+            - total_calls: Total number of API calls made
+            - duration_seconds: Total session duration
+            - calls_per_minute: Average API calls per minute
+            - estimated_remaining_daily: Estimated remaining daily quota (based on 500/day limit)
+        """
+        duration = time.time() - self.session_start_time
+        return {
+            "total_calls": self.api_call_count,
+            "duration_seconds": duration,
+            "calls_per_minute": self.api_call_count / (duration / 60) if duration > 0 else 0,
+            "estimated_remaining_daily": max(0, 500 - self.api_call_count)
+        }
 
     def close(self):
         """Close the session."""

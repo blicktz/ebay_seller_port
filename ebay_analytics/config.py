@@ -116,6 +116,32 @@ class Config:
         return float(os.getenv('API_CALL_DELAY_SECONDS', '5.0'))
 
     @property
+    def api_call_delay_between_batches(self) -> float:
+        """Get delay between batches in seconds (default: 10.0)."""
+        return float(os.getenv('API_CALL_DELAY_BETWEEN_BATCHES', '10.0'))
+
+    @property
+    def api_call_delay_between_days(self) -> float:
+        """Get delay between days in seconds (default: 15.0)."""
+        return float(os.getenv('API_CALL_DELAY_BETWEEN_DAYS', '15.0'))
+
+    @property
+    def api_rate_limit_safe_mode(self) -> bool:
+        """Check if safe mode is enabled for extra conservative delays (default: True)."""
+        value = os.getenv('API_RATE_LIMIT_SAFE_MODE', 'true').lower()
+        return value in ('true', '1', 'yes', 'on')
+
+    @property
+    def api_rate_limit_max_wait_seconds(self) -> int:
+        """Get maximum seconds to wait for rate limit reset (default: 86400 = 24 hours)."""
+        return int(os.getenv('API_RATE_LIMIT_MAX_WAIT_SECONDS', '86400'))
+
+    @property
+    def api_rate_limit_max_wait_count(self) -> int:
+        """Get maximum number of times to wait for rate limit before aborting (default: 10)."""
+        return int(os.getenv('API_RATE_LIMIT_MAX_WAIT_COUNT', '10'))
+
+    @property
     def user_timezone(self) -> str:
         """Get user's timezone for date conversion (default: America/Los_Angeles for PST/PDT)."""
         return os.getenv('USER_TIMEZONE', 'America/Los_Angeles')

@@ -212,8 +212,10 @@ class AnalyticsAPIClient(BaseAPIClient):
 
             # Add delay between batches to avoid rate limiting (except after last batch)
             if batch_num < total_batches:
-                delay = 3.0
-                print(f"   ⏱  Waiting {delay}s before next batch...")
+                delay = self.config.api_call_delay_between_batches
+                if self.config.api_rate_limit_safe_mode:
+                    delay *= 1.5  # Add 50% more delay in safe mode
+                print(f"   ⏱  Waiting {delay:.1f}s before next batch...")
                 time.sleep(delay)
 
         print(f"   ✓ Total records retrieved: {len(all_records)}")
@@ -283,8 +285,10 @@ class AnalyticsAPIClient(BaseAPIClient):
 
             # Add delay between batches to avoid rate limiting (except after last batch)
             if batch_num < total_batches:
-                delay = 3.0
-                print(f"   ⏱  Waiting {delay}s before next batch...")
+                delay = self.config.api_call_delay_between_batches
+                if self.config.api_rate_limit_safe_mode:
+                    delay *= 1.5  # Add 50% more delay in safe mode
+                print(f"   ⏱  Waiting {delay:.1f}s before next batch...")
                 time.sleep(delay)
 
         print(f"   ✓ Total records retrieved: {len(all_records)}")
