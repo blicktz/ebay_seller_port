@@ -168,3 +168,9 @@ downloads/
 notes.txt
 TODO.txt
 scratch.py
+
+# Generated output and tests
+output/
+ebay_upload_ready.csv
+test_results.csv
+test_upc.txt

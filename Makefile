@@ -1,7 +1,7 @@
 # eBay Seller Analytics - Makefile
 # Provides convenient targets for running analytics tasks with configurable date ranges
 
-.PHONY: help install init-db sync-metadata sync-sold-items sync-traffic generate-report full-sync clean-db verify test dvd-init-db dvd-lookup dvd-stats dvd-export dvd-clean-cache dvd-not-found
+.PHONY: help install init-db sync-metadata sync-sold-items sync-traffic generate-report full-sync clean-db verify test dvd-init-db dvd-lookup dvd-stats dvd-export dvd-clean-cache dvd-not-found dvd-generate-csv
 
 # Configuration variables (can be overridden: make sync-traffic START_DATE=20260201)
 START_DATE ?= $(shell date -v-7d +%Y%m%d 2>/dev/null || date -d "7 days ago" +%Y%m%d 2>/dev/null)
@@ -53,6 +53,7 @@ help:
 	@echo "  make dvd-export        Export DVD catalog to CSV"
 	@echo "  make dvd-not-found     List UPCs not found in catalog"
 	@echo "  make dvd-clean-cache   Remove expired cache entries"
+	@echo "  make dvd-generate-csv  Generate eBay bulk upload draft CSV"
 	@echo ""
 	@echo "$(COLOR_YELLOW)Date Range Configuration:$(COLOR_RESET)"
 	@echo "  START_DATE=$(START_DATE) (default: 7 days ago)"
@@ -187,3 +188,7 @@ dvd-not-found:
 dvd-clean-cache:
 	@echo "$(COLOR_BLUE)Cleaning expired cache entries...$(COLOR_RESET)"
 	poetry run python -m dvd_listings.cli clean-cache
+
+dvd-generate-csv:
+	@echo "$(COLOR_BLUE)Generating eBay bulk upload draft CSV...$(COLOR_RESET)"
+	poetry run python scripts/generate_ebay_draft.py
