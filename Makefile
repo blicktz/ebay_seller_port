@@ -1,7 +1,7 @@
 # eBay Seller Analytics - Makefile
 # Provides convenient targets for running analytics tasks with configurable date ranges
 
-.PHONY: help install init-db sync-metadata sync-sold-items sync-traffic generate-report full-sync clean-db verify test
+.PHONY: help install init-db sync-metadata sync-sold-items sync-traffic generate-report full-sync clean-db verify test dvd-init-db dvd-lookup dvd-stats dvd-export dvd-clean-cache dvd-not-found
 
 # Configuration variables (can be overridden: make sync-traffic START_DATE=20260201)
 START_DATE ?= $(shell date -v-7d +%Y%m%d 2>/dev/null || date -d "7 days ago" +%Y%m%d 2>/dev/null)
@@ -10,6 +10,12 @@ SOLD_LOOKBACK ?= 90
 MARKETPLACE ?= EBAY_US
 OUTPUT_FILE ?= reports/traffic_report_$(shell date +%Y%m%d_%H%M%S).csv
 DB_PATH ?= data/ebay_analytics.db
+
+# DVD Listing Automation variables
+DVD_FILE ?= upcs.txt
+DVD_DB_PATH ?= data/dvd_catalog.db
+DVD_BATCH_SIZE ?= 20
+DVD_EXPORT_FILE ?= data/dvd_exports/catalog_$(shell date +%Y%m%d_%H%M%S).csv
 
 # Colors for output
 COLOR_RESET = \033[0m
@@ -40,6 +46,14 @@ help:
 	@echo "  make test              Run unit tests"
 	@echo "  make help              Show this help message"
 	@echo ""
+	@echo "$(COLOR_GREEN)DVD Listing Automation:$(COLOR_RESET)"
+	@echo "  make dvd-init-db       Initialize DVD catalog database"
+	@echo "  make dvd-lookup        Look up UPCs from file (FILE=upcs.txt)"
+	@echo "  make dvd-stats         Show DVD catalog statistics"
+	@echo "  make dvd-export        Export DVD catalog to CSV"
+	@echo "  make dvd-not-found     List UPCs not found in catalog"
+	@echo "  make dvd-clean-cache   Remove expired cache entries"
+	@echo ""
 	@echo "$(COLOR_YELLOW)Date Range Configuration:$(COLOR_RESET)"
 	@echo "  START_DATE=$(START_DATE) (default: 7 days ago)"
 	@echo "  END_DATE=$(END_DATE) (default: today)"
@@ -51,6 +65,7 @@ help:
 	@echo "  make sync-sold-items SOLD_LOOKBACK=60"
 	@echo "  make generate-report START_DATE=20260218 OUTPUT_FILE=reports/feb_week3.csv"
 	@echo "  make full-sync START_DATE=20260201 END_DATE=20260225"
+	@echo "  make dvd-lookup FILE=my_dvds.csv BATCH_SIZE=15"
 	@echo ""
 
 install:
@@ -136,3 +151,39 @@ quick-sync:
 quick-report:
 	@echo "$(COLOR_BOLD)Quick report (last 7 days)...$(COLOR_RESET)"
 	@$(MAKE) generate-report
+
+# ==============================================================================
+# DVD Listing Automation Targets
+# ==============================================================================
+
+dvd-init-db:
+	@echo "$(COLOR_BLUE)Initializing DVD catalog database...$(COLOR_RESET)"
+	poetry run python -m dvd_listings.cli init-db --db-path $(DVD_DB_PATH)
+	@echo "$(COLOR_GREEN)✓ DVD database initialized$(COLOR_RESET)"
+
+dvd-lookup:
+	@echo "$(COLOR_BLUE)Looking up DVDs from file...$(COLOR_RESET)"
+	@echo "  File: $(DVD_FILE)"
+	@echo "  Batch size: $(DVD_BATCH_SIZE)"
+	@echo "  Export: $(DVD_EXPORT_FILE)"
+	poetry run python -m dvd_listings.cli lookup-upcs \
+		--file $(DVD_FILE) \
+		--batch-size $(DVD_BATCH_SIZE) \
+		--export $(DVD_EXPORT_FILE)
+
+dvd-stats:
+	@echo "$(COLOR_BLUE)DVD Catalog Statistics$(COLOR_RESET)"
+	poetry run python -m dvd_listings.cli stats
+
+dvd-export:
+	@echo "$(COLOR_BLUE)Exporting DVD catalog...$(COLOR_RESET)"
+	@mkdir -p data/dvd_exports
+	poetry run python -m dvd_listings.cli export-results --output $(DVD_EXPORT_FILE)
+
+dvd-not-found:
+	@echo "$(COLOR_BLUE)UPCs not found in catalog:$(COLOR_RESET)"
+	poetry run python -m dvd_listings.cli list-not-found
+
+dvd-clean-cache:
+	@echo "$(COLOR_BLUE)Cleaning expired cache entries...$(COLOR_RESET)"
+	poetry run python -m dvd_listings.cli clean-cache
